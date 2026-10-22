@@ -31,7 +31,9 @@
       "!mod/**",
       "!dist/**",
       "!build/icon.ico",
-      "!README.md"
+      "!README.md",
+      "!.github/**",
+      "!build/release-notes.md"
     ],
     "extraResources": [
       {
@@ -76,7 +78,10 @@
         "repo": "NeuralLink",
         "releaseType": "release"
       }
-    ]
+    ],
+    "releaseInfo": {
+      "releaseNotesFile": "build/release-notes.md"
+    }
   },
   "repository": {
     "type": "git",

@@ -141,3 +141,9 @@ HOST in one, JOIN in the other with the code.
 - `mod/CoopOperator/` — the CET mod (window, messages, focus, targeting)
 - `mod/r6/scripts/PeriLink/PeriLink.reds` — real quickhacks + the "only Peri can hack" lock
 - `assets/icons/` — Peri's icons (the in-game versions are in `mod/CoopOperator/icons.lua`)
+
+## Releasing a new version (for Peri)
+
+1. Bump `"version"` in `package.json` (e.g. 0.4.1) and update `build/release-notes.md`.
+2. Commit, then push a tag with the same number: `git tag v0.4.1 && git push origin main v0.4.1`.
+3. GitHub Actions builds the installer and publishes the release. Everyone gets it with **Install / Update**.

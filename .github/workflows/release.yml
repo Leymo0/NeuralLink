@@ -1,0 +1,50 @@
+# Builds the Windows installer and publishes a GitHub release whenever a version tag (v1.2.3) is pushed.
+# NeuralLink's "Install / Update" button downloads updates from these releases.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Built-in copies of the latest CET + redscript, used when the player is offline
+      - name: Bundle latest Cyber Engine Tweaks and redscript
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Force thirdparty/game | Out-Null
+          $headers = @{ 'User-Agent' = 'NeuralLink-CI'; Authorization = "Bearer $env:GH_TOKEN" }
+          $mods = @(
+            @{ repo = 'maximegmd/CyberEngineTweaks'; pattern = '^cet_[\d.]+\.zip$' },
+            @{ repo = 'jac3km4/redscript';           pattern = '^redscript-v[\d.]+-windows\.zip$' }
+          )
+          foreach ($m in $mods) {
+            $release = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/$($m.repo)/releases/latest"
+            $asset = $release.assets | Where-Object { $_.name -match $m.pattern } | Select-Object -First 1
+            if (-not $asset) { throw "No matching asset in $($m.repo) $($release.tag_name)" }
+            Write-Host "Bundling $($asset.name)"
+            Invoke-WebRequest -Headers $headers $asset.browser_download_url -OutFile "$env:RUNNER_TEMP\mod.zip"
+            Expand-Archive "$env:RUNNER_TEMP\mod.zip" -DestinationPath thirdparty/game -Force
+          }
+
+      - name: Build installer and publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win nsis --x64 --publish always
