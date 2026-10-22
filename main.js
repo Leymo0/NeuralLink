@@ -221,7 +221,11 @@ async function runUpdate(includeGame) {
       await updater.downloadAppUpdate(progress);
       saveSettings({ pendingAfterUpdate: { installGame: !!includeGame, from: app.getVersion(), to: check.version } });
       progress(`Installing NeuralLink ${check.version}… it will reopen by itself`);
-      setTimeout(() => updater.installAppUpdateAndRestart(), 1200);
+      setTimeout(() => {
+        // Close everything first so the installer can replace our files
+        for (const w of BrowserWindow.getAllWindows()) w.destroy();
+        updater.installAppUpdateAndRestart();
+      }, 1200);
       return { ok: true, restarting: true, version: check.version };
     }
   } catch (err) {
@@ -334,7 +338,24 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'index.html'));
 }
 
+// Only one NeuralLink at a time. Opening it again brings the existing window forward
+// (or recreates it if a background copy lost its window).
+const isSelfTest = !!process.env.NEURALLINK_SELFTEST_GAME;
+const gotLock = isSelfTest || app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!win || win.isDestroyed()) { createWindow(); return; }
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+}
+
 app.whenReady().then(() => {
+  if (!gotLock) return;
+  updater.updateLog(`start ${app.getVersion()}`);
   // Self-test used when building the installer: install into a given game folder and quit
   if (process.env.NEURALLINK_SELFTEST_GAME) {
     saveSettings({ gameFolder: process.env.NEURALLINK_SELFTEST_GAME });

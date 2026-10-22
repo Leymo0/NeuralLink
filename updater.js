@@ -97,12 +97,30 @@ async function updateGameMods(gameFolder, installed, bundledFolder, onProgress) 
 // App self-update (electron-updater, GitHub releases of Leymo0/NeuralLink)
 // ---------------------------------------------------------------------------
 
+// Simple log file so update problems can be diagnosed:
+// %APPDATA%\NeuralLink\update.log
+function updateLog(...parts) {
+  try {
+    const line = `[${new Date().toISOString()}] ${parts.map((p) => (p instanceof Error ? p.stack || p.message : String(p))).join(' ')}\n`;
+    const file = path.join(app.getPath('userData'), 'update.log');
+    // keep it small
+    if (fs.existsSync(file) && fs.statSync(file).size > 200_000) fs.writeFileSync(file, '');
+    fs.appendFileSync(file, line);
+  } catch { /* logging must never break anything */ }
+}
+
 let autoUpdater = null;
 function getAutoUpdater() {
   if (!autoUpdater) {
     autoUpdater = require('electron-updater').autoUpdater;
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.logger = {
+      info: (...a) => updateLog('info', ...a),
+      warn: (...a) => updateLog('warn', ...a),
+      error: (...a) => updateLog('error', ...a),
+      debug: () => {},
+    };
   }
   return autoUpdater;
 }
@@ -129,8 +147,11 @@ function downloadAppUpdate(onProgress) {
 }
 
 function installAppUpdateAndRestart() {
-  // silent install, then start the new version
-  getAutoUpdater().quitAndInstall(true, true);
+  // Visible installer (not silent): if anything goes wrong — e.g. NeuralLink is still
+  // closing — Windows shows "close it and click Retry" instead of failing quietly.
+  // The new version starts by itself when it's done.
+  updateLog('installing update: quitAndInstall(visible, runAfter)');
+  getAutoUpdater().quitAndInstall(false, true);
 }
 
 function isNewer(a, b) {
@@ -141,4 +162,4 @@ function isNewer(a, b) {
   return false;
 }
 
-module.exports = { updateGameMods, checkAppUpdate, downloadAppUpdate, installAppUpdateAndRestart, extractInto };
+module.exports = { updateLog, updateGameMods, checkAppUpdate, downloadAppUpdate, installAppUpdateAndRestart, extractInto };
