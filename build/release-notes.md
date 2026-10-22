@@ -1,14 +1,10 @@
-**NeuralLink 0.6.0**
+**NeuralLink 0.6.1**
 
-### Focus shows name tags
-- Hold **Space**: every person, camera and turret on his screen gets a **name tag** above it.
-- Hover a name → **1–8** (or left-click) to hack it, **right-click** for its full hack menu. The hotbar shows the real costs for the hovered target.
-
-### OVERRIDE has a voice
-- When Peri uses the ultimate, her voice line plays on his PC (Peri hears it too through the stream).
-- Volume slider and a ▶ Test button on the Host screen.
+### Much better game sound for Peri
+- Turned off the voice-call filters (echo cancellation, noise suppression, auto-volume) that were squashing music, explosions and dialogue.
+- Game audio is now sent in **stereo at high quality** (~256 kbps instead of voice-call mono).
 
 ### How to update
-Click **Install / Update** (Host, with Cyberpunk closed) or **Check for updates** (home screen).
+**Both of you** update this time (the fix is on both sides): **Install / Update** (Host) and **Check for updates** (home screen). Then start a new room.
 
 Bundled third-party mods: [Cyber Engine Tweaks](https://github.com/maximegmd/CyberEngineTweaks) and [redscript](https://github.com/jac3km4/redscript) (MIT).

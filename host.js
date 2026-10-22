@@ -86,10 +86,22 @@ const Host = (() => {
   async function capture() {
     const s = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: settings.frameRate, max: settings.frameRate } },
-      audio: settings.shareAudio,
+      // Game sound: no voice-call filters (they squash music and explosions), full stereo
+      audio: settings.shareAudio ? {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 2,
+        sampleRate: 48000,
+      } : false,
     });
     const video = s.getVideoTracks()[0];
     if (video) video.contentHint = 'motion';   // favor smooth motion over sharp text
+    const audio = s.getAudioTracks()[0];
+    if (audio) {
+      audio.contentHint = 'music';             // tells the encoder this isn't speech
+      audio.applyConstraints({ echoCancellation: false, noiseSuppression: false, autoGainControl: false }).catch(() => {});
+    }
     return s;
   }
 
@@ -106,6 +118,15 @@ const Host = (() => {
           p.encodings[0].maxFramerate = settings.frameRate;
           p.degradationPreference = 'maintain-framerate';
           await sender.setParameters(p);
+          // and a high audio bitrate for the game sound
+          const audioSender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+          if (audioSender) {
+            const ap = audioSender.getParameters();
+            if (!ap.encodings || !ap.encodings.length) ap.encodings = [{}];
+            ap.encodings[0].maxBitrate = 256000;
+            ap.encodings[0].priority = 'high';
+            await audioSender.setParameters(ap).catch(() => {});
+          }
           return;
         } catch { /* not negotiated yet */ }
       }
@@ -141,7 +162,7 @@ const Host = (() => {
       conn.on('open', () => {
         setStatus('Peri jacked in', 'live');
         log('act', 'Peri connected');
-        call = peer.call(conn.peer, stream);
+        call = peer.call(conn.peer, stream, { sdpTransform: hiFiAudioSdp });
         tuneQuality(call);
         if (lastState) conn.send({ type: 'state', state: lastState });
       });

@@ -22,6 +22,25 @@ function iceConfig(settings) {
   };
 }
 
+// Game audio is music, not a phone call: ask for full-quality stereo Opus in the connection
+// setup (both sides must agree, so host and guest both apply this).
+function hiFiAudioSdp(sdp) {
+  const m = sdp.match(/a=rtpmap:(\d+) opus\/48000\/2/i);
+  if (!m) return sdp;
+  const pt = m[1];
+  const wanted = { stereo: '1', 'sprop-stereo': '1', maxaveragebitrate: '256000', maxplaybackrate: '48000', useinbandfec: '1', usedtx: '0' };
+  const fmtp = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`);
+  if (fmtp.test(sdp)) {
+    return sdp.replace(fmtp, (_all, params) => {
+      const map = {};
+      params.split(';').forEach((kv) => { const [k, v] = kv.split('='); if (k) map[k.trim()] = (v || '').trim(); });
+      Object.assign(map, wanted);
+      return `a=fmtp:${pt} ` + Object.entries(map).map(([k, v]) => `${k}=${v}`).join(';');
+    });
+  }
+  return sdp.replace(m[0], `${m[0]}\r\na=fmtp:${pt} ` + Object.entries(wanted).map(([k, v]) => `${k}=${v}`).join(';'));
+}
+
 function showView(name) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
 }

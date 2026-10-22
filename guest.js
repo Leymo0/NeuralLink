@@ -122,7 +122,7 @@ const Guest = (() => {
 
     // The host calls us with his screen once the data link is open
     peer.on('call', (call) => {
-      call.answer();
+      call.answer(undefined, { sdpTransform: hiFiAudioSdp });
       call.on('stream', (stream) => {
         clearTimeout(connectTimeout);
         const video = $('stage-video');
