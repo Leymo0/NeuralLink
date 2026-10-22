@@ -14,9 +14,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -44,7 +44,27 @@ jobs:
             Expand-Archive "$env:RUNNER_TEMP\mod.zip" -DestinationPath thirdparty/game -Force
           }
 
-      - name: Build installer and publish release
+      - name: Build installer
+        shell: pwsh
+        run: |
+          npx electron-builder --win nsis --x64 --publish never 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            $tail = (Get-Content build.log -Tail 20) -join ' || '
+            Write-Output "::error title=Build failed::$tail"
+            exit 1
+          }
+
+      - name: Publish GitHub release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win nsis --x64 --publish always
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $files = @(Get-ChildItem dist -File | Where-Object { $_.Name -match '\.(exe|blockmap)$' -or $_.Name -eq 'latest.yml' } | ForEach-Object { $_.FullName })
+          Write-Host "Publishing v$version with: $($files -join ', ')"
+          $out = gh release create "v$version" @files --title "NeuralLink $version" --notes-file build/release-notes.md --target $env:GITHUB_SHA 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Publish failed::$($out -join ' || ')"
+            exit 1
+          }
+          Write-Host $out
