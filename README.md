@@ -44,6 +44,7 @@ or behind walls.
 - Hacks cost **no RAM** while it lasts.
 - Costs V **10% of his health**, but never takes him below 10% — it can't kill him.
 - **60 s cooldown** (shown on Peri's bar and in his HUD).
+- Plays Peri's voice line on his PC when it starts (volume + test button on the Host screen).
 
 Tuning: `ultDuration`, `ultCooldown`, `ultRadius`, `ultHurtPercent`, `ultHealthFloor` at the top of
 `mod/CoopOperator/init.lua`.
@@ -117,7 +118,7 @@ Never reinstall — just click:
 | *(just pointing)* | The hotbar shows each hack's **real cost on the target under your mouse** (green), "–" if it doesn't work there |
 | **Left-click** | Upload the selected quickhack where you click (click a slot in the bar to select it). Clicking a **device** (camera, turret, door…) opens its hack menu |
 | **Right-click** | Scan: open the game's hack menu for whatever is under the mouse (NPC or device). Pick with **1–9** or click; **Esc** closes |
-| **Hold Space** | Focus: time nearly stops while you aim. Drains a 6-second meter that refills when you let go |
+| **Hold Space** | Focus: time slows to 10% and **every target on his screen gets a name tag**. Hover a name → 1–8 / left-click to hack it, right-click for its menu. Drains a 6-second meter that refills when you let go |
 | **Q** / middle-click | Ping: "LOOK" marker on his screen |
 | **F** | **ULTIMATE: OVERRIDE** — see below |
 | **Enter** | Type a message → appears top-right in his HUD |

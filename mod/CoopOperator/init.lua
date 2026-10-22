@@ -19,6 +19,8 @@
     ult|                     -> ULTIMATE: radar of everything around V, no RAM, slow time (6 s)
     ulthack|<id> <slot>      -> during the ultimate: upload deck slot to radar target <id>
     ultmenu|<id>             -> during the ultimate: open radar target <id>'s hack menu
+                                (ulthack/ultmenu also work on focus name tags)
+    aimid|<id>               -> Peri hovers a name tag / radar dot: report real hotbar costs for it
 
   The mod writes state.json (his deck, RAM, last hack result) for the app to show Peri.
 
@@ -88,6 +90,9 @@ local Coop = {
     ultTargets     = {},     -- id -> { obj, kind, name } while the ultimate is active
     ultList        = {},     -- what Peri's radar shows: { {id, name, kind, x, y} }
     aim            = nil,    -- what's under Peri's mouse: { id, name, kind, costs = { {cost, usable}, ... } }
+    tags           = {},     -- while focusing: name tags of every target on screen { {id, name, kind, x, y} }
+    tagTargets     = {},     -- id -> { obj, kind, name } for those tags
+    nameCache      = {},     -- id -> display name (looking names up isn't free)
     aimAt          = 0,      -- when aim was last computed (os.clock)
     vram           = 4,
     vramMax        = 4,
@@ -108,6 +113,7 @@ local markers       = {}
 local OUTBOX         = "state.json"
 local STATE_INTERVAL = 0.5
 local ultTimer       = 0
+local tagTimer       = 0
 local stateTimer     = 0
 local lastStateText  = ""
 local results        = {}   -- recent hack results for Peri's app: { {seq, ok, text}, ... }
@@ -436,13 +442,29 @@ end
 -- Real hotbar costs for whatever is under Peri's mouse
 -- ---------------------------------------------------------------------------
 
+local function targetName(id, obj, kind)
+    local name = Coop.nameCache[id]
+    if not name then
+        local ok, n = pcall(function() return obj:PeriLinkName() end)
+        name = (ok and n and n ~= "") and n or (kind == "npc" and "Person" or "Device")
+        Coop.nameCache[id] = name
+    end
+    return name
+end
+
+local updateAimTarget
+
 local function updateAim(sx, sy)
     if not sx or not scriptsLoaded() then
         Coop.aim = nil
         return
     end
     local target, _, _, kind = getTargetNear(sx, sy, nil)
-    if not target then
+    updateAimTarget(target, kind)
+end
+
+updateAimTarget = function(target, kind)
+    if not target or not scriptsLoaded() then
         Coop.aim = nil
         return
     end
@@ -450,8 +472,7 @@ local function updateAim(sx, sy)
     -- Same target as before and fresh enough: keep it (building the list isn't free)
     if Coop.aim and Coop.aim.id == id and os.clock() - Coop.aimAt < 1.0 then return end
 
-    local aim = { id = id, kind = kind, costs = {} }
-    pcall(function() aim.name = target:PeriLinkName() end)
+    local aim = { id = id, kind = kind, costs = {}, name = targetName(id, target, kind) }
     if kind == "npc" then
         pcall(function()
             for _, line in ipairs(target:PeriLinkSlotCosts(Coop.virtualEnabled, Coop.ultLeft > 0) or {}) do
@@ -489,12 +510,7 @@ local function refreshUltTargets()
             local ahead = dx * fx + dy * fy
             local right = dx * fy - dy * fx
             if dx * dx + dy * dy <= Coop.ultRadius * Coop.ultRadius then
-                local cached = Coop.ultTargets[id]
-                local name = cached and cached.name
-                if not name then
-                    local okName, n = pcall(function() return t.obj:PeriLinkName() end)
-                    name = (okName and n and n ~= "") and n or (t.kind == "npc" and "Person" or "Device")
-                end
+                local name = targetName(id, t.obj, t.kind)
                 targets[id] = { obj = t.obj, kind = t.kind, name = name }
                 list[#list + 1] = { id = id, name = name, kind = t.kind, x = right, y = ahead }
             end
@@ -533,10 +549,29 @@ local function stopUltimate()
     if Coop.focusHeld then setSlow(2, true, Coop.focusDilation) end   -- focus still held
 end
 
--- Peri picked a radar target
-local function ultHack(id, slot)
-    local t = Coop.ultTargets[id]
-    if Coop.ultLeft <= 0 or not t then
+-- Name tags while Peri focuses: every target on his screen, with its screen position
+local function refreshTags()
+    local tags, targets = {}, {}
+    for _, t in ipairs(getVisibleTargets(false)) do
+        pcall(function()
+            local pos = t.obj:GetWorldPosition()
+            local lift = t.kind == "npc" and 1.2 or 0.0
+            local x, y = projectToScreen(Vector4.new(pos.x, pos.y, pos.z + lift, 1))
+            if x then
+                local id = tostring(t.obj:GetEntityID().hash)
+                local name = targetName(id, t.obj, t.kind)
+                targets[id] = { obj = t.obj, kind = t.kind, name = name }
+                tags[#tags + 1] = { id = id, name = name, kind = t.kind, x = x, y = y }
+            end
+        end)
+    end
+    Coop.tags, Coop.tagTargets = tags, targets
+end
+
+-- Peri picked a target by id (a focus name tag or a radar dot). slot = nil opens its hack menu.
+local function hackById(id, slot)
+    local t = Coop.tagTargets[id] or Coop.ultTargets[id]
+    if not t then
         setResult(false, "That target is gone")
         return
     end
@@ -546,7 +581,7 @@ local function ultHack(id, slot)
     end
     local hackName = Coop.deck[slot + 1] and Coop.deck[slot + 1].name or ("slot " .. (slot + 1))
     local ok, res = pcall(function()
-        return t.obj:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), true)
+        return t.obj:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
     end)
     handleHackResult(ok, res, hackName, nil, nil)
 end
@@ -587,6 +622,11 @@ local function writeState()
         targets[#targets + 1] = string.format('{"id":%s,"name":%s,"kind":%s,"x":%.1f,"y":%.1f}',
             jsonString(t.id), jsonString(t.name), jsonString(t.kind), t.x, t.y)
     end
+    local tagParts = {}
+    for _, t in ipairs(Coop.tags) do
+        tagParts[#tagParts + 1] = string.format('{"id":%s,"name":%s,"kind":%s,"x":%.4f,"y":%.4f}',
+            jsonString(t.id), jsonString(t.name), jsonString(t.kind), t.x, t.y)
+    end
     local ult = string.format('{"left":%.1f,"cd":%.1f,"duration":%.1f,"cooldown":%.1f,"radius":%d,"targets":[%s]}',
         Coop.ultLeft, Coop.ultCdLeft, Coop.ultDuration, Coop.ultCooldown, Coop.ultRadius, table.concat(targets, ","))
     local aim = "null"
@@ -599,10 +639,10 @@ local function writeState()
             jsonString(Coop.aim.id), jsonString(Coop.aim.name or ""), jsonString(Coop.aim.kind or ""), table.concat(costs, ","))
     end
     local text = string.format(
-        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"ult":%s,"aim":%s,"deck":[%s],"menu":%s,"results":[%s]}',
+        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"ult":%s,"aim":%s,"tags":[%s],"deck":[%s],"menu":%s,"results":[%s]}',
         tostring(Coop.scriptsOk == true), tostring(Coop.hostCanHack), tostring(Coop.virtualActive),
         Coop.virtualActive and Coop.vram or (Coop.ram[1] or 0), Coop.ram[2] or 0,
-        Coop.focusLeft, Coop.focusMax, tostring(Coop.focusHeld), ult, aim,
+        Coop.focusLeft, Coop.focusMax, tostring(Coop.focusHeld), ult, aim, table.concat(tagParts, ","),
         table.concat(parts, ","), menu, table.concat(res, ","))
     if text == lastStateText then return end
     local f = io.open(OUTBOX, "w")
@@ -656,10 +696,14 @@ local function handleCommand(cmd, arg)
         startUltimate()
     elseif cmd == "ulthack" then
         local id, slot = arg:match("^(%S+)%s+(%d+)$")
-        if id then ultHack(id, tonumber(slot)) end
+        if id then hackById(id, tonumber(slot)) end
     elseif cmd == "ultmenu" then
         local id = arg:match("^(%S+)$")
-        if id then ultHack(id, nil) end
+        if id then hackById(id, nil) end
+    elseif cmd == "aimid" then
+        local t = Coop.tagTargets[arg] or Coop.ultTargets[arg]
+        updateAimTarget(t and t.obj, t and t.kind)
+        writeState()
     elseif cmd == "virtual" then
         Coop.virtualEnabled = (arg == "1")
         refreshDeck()
@@ -858,6 +902,19 @@ registerForEvent("onUpdate", function(dt)
         end
     elseif Coop.focusLeft < Coop.focusMax then
         Coop.focusLeft = math.min(Coop.focusMax, Coop.focusLeft + Coop.focusRecharge * dt)
+    end
+
+    -- Focus: keep name tags over every target on screen
+    if Coop.focusHeld and Coop.ultLeft <= 0 then
+        tagTimer = tagTimer + dt
+        if tagTimer >= 0.25 then
+            tagTimer = 0
+            refreshTags()
+            writeState()
+        end
+    elseif #Coop.tags > 0 then
+        Coop.tags, Coop.tagTargets = {}, {}
+        writeState()
     end
 
     -- Ultimate: count down, keep the radar fresh, and keep the slow-down applied

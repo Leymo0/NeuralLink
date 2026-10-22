@@ -187,6 +187,13 @@ const Host = (() => {
     if (msg.type !== 'cmd') return;
 
     // Aim updates are frequent and harmless: rate-limit them separately, never log them
+    if (msg.cmd === 'aimid') {
+      const t = Date.now();
+      if (t - lastAimAt < 150) return;
+      lastAimAt = t;
+      window.neural.sendToGame({ cmd: 'aimid', id: String(msg.id || '').slice(0, 40) });
+      return;
+    }
     if (msg.cmd === 'aim') {
       const t = Date.now();
       if (t - lastAimAt < 150) return;
@@ -256,9 +263,21 @@ const Host = (() => {
 
   // ---------- his deck/RAM -> Peri ----------
 
+  // Peri's voice line when OVERRIDE starts (plays on his PC — and Peri hears it through the stream)
+  const overrideVoice = new Audio('assets/sounds/override.mp3');
+  let lastUltLeft = 0;
+
   async function pollState() {
     const state = await window.neural.gameState();
     if (!state) return;
+    const ultLeft = state.ult?.left || 0;
+    if (ultLeft > 0 && lastUltLeft <= 0) {
+      overrideVoice.currentTime = 0;
+      overrideVoice.volume = settings?.voiceVolume ?? 1;
+      overrideVoice.play().catch(() => {});
+      log('act', 'OVERRIDE — voice line');
+    }
+    lastUltLeft = ultLeft;
     const json = JSON.stringify(state);
     if (json === lastStateJson) return;
     lastStateJson = json;
@@ -291,6 +310,7 @@ const Host = (() => {
     settings = await window.neural.getSettings();
     $('share-audio').checked = settings.shareAudio;
     $('only-peri').checked = !settings.hostCanHack;
+    $('voice-volume').value = settings.voiceVolume ?? 1;
     $('virtual-deck').checked = !!settings.virtualDeck;
     await refreshGame();
     await loadSources();
@@ -356,6 +376,14 @@ const Host = (() => {
         setStatus('Update failed', 'warn');
       }
       refreshGame();
+    });
+    $('voice-volume').addEventListener('change', async (e) => {
+      settings = await window.neural.saveSettings({ voiceVolume: Number(e.target.value) });
+    });
+    $('voice-test').addEventListener('click', () => {
+      overrideVoice.currentTime = 0;
+      overrideVoice.volume = Number($('voice-volume').value);
+      overrideVoice.play().catch(() => {});
     });
     $('virtual-deck').addEventListener('change', async (e) => {
       settings = await window.neural.saveSettings({ virtualDeck: e.target.checked });

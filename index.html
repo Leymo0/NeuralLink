@@ -75,6 +75,7 @@
       <h2 class="h2-row">2 · What to share <button id="refresh-sources" class="small">↻ Refresh</button></h2>
       <p class="muted small-text">Started Cyberpunk after opening this? It shows up within a few seconds. Sharing the whole screen works too.</p>
       <div id="sources" class="sources"></div>
+      <label class="check">Peri's OVERRIDE voice volume <input type="range" id="voice-volume" min="0" max="1" step="0.05"> <button id="voice-test" class="small">▶ Test</button></label>
       <label class="check"><input type="checkbox" id="share-audio"> Share game sound (also shares other PC sounds, like Discord voice)</label>
     </div>
 
@@ -177,6 +178,7 @@
         <input id="chat-input" maxlength="220" autocomplete="off" spellcheck="false">
       </div>
     </div>
+    <div id="tags"></div>
     <div id="radar" hidden>
       <div class="radar-head">
         <span class="radar-title">OVERRIDE</span>

@@ -171,6 +171,8 @@ const Guest = (() => {
 
   function cleanup() {
     focusing = false;
+    hoverTag = null;
+    $('tags').innerHTML = '';
     menuSeqShown = menuSeqClosed = 0;
     $('hack-menu').hidden = true;
     clearInterval(hbTimer);
@@ -248,12 +250,65 @@ const Guest = (() => {
     document.querySelector('.focus-meter').classList.toggle('active', !!f[2]);
   }
 
+  // ---------- focus name tags: every target on his screen, hover a name to hack it ----------
+
+  let hoverTag = null;
+  const tagsShown = () => !ultActive() && (state?.tags?.length || 0) > 0;
+
+  function renderTags() {
+    const box = $('tags');
+    if (!tagsShown()) {
+      if (box.childElementCount) box.innerHTML = '';
+      if (hoverTag) { hoverTag = null; aimDirty = true; lastAimSent = null; }
+      return;
+    }
+    const r = videoRect();
+    box.innerHTML = '';
+    for (const t of state.tags) {
+      const el = document.createElement('div');
+      el.className = 'tag ' + t.kind + (t.id === hoverTag ? ' hover' : '');
+      el.dataset.id = t.id;
+      el.style.left = `${r.x + t.x * r.w}px`;
+      el.style.top = `${r.y + t.y * r.h}px`;
+      el.innerHTML = '<span></span><i></i>';
+      el.querySelector('span').textContent = t.name;
+      box.appendChild(el);
+    }
+    updateTagHover();
+  }
+
+  // The name tag nearest the mouse (within 70 px of its label) is the target
+  function updateTagHover() {
+    if (!tagsShown()) return;
+    let best = null, bestD = 70;
+    for (const el of $('tags').children) {
+      const b = el.querySelector('span').getBoundingClientRect();
+      const d = Math.hypot(mouse.x - (b.left + b.width / 2), mouse.y - (b.top + b.height / 2));
+      if (d < bestD) { bestD = d; best = el.dataset.id; }
+    }
+    if (best !== hoverTag) {
+      hoverTag = best;
+      for (const el of $('tags').children) el.classList.toggle('hover', el.dataset.id === hoverTag);
+      // real hotbar costs for the hovered tag (or back to "what's under the mouse")
+      if (hoverTag && conn?.open) conn.send({ type: 'cmd', cmd: 'aimid', id: hoverTag });
+      else { aimDirty = true; lastAimSent = null; }
+    }
+  }
+
+  function tagHack(slot) {
+    const deck = state?.deck || [];
+    if (slot >= deck.length) return toast(`Slot ${slot + 1} is empty`);
+    const t = (state?.tags || []).find((x) => x.id === hoverTag);
+    send({ cmd: 'ulthack', id: hoverTag, slot });
+    toast(`${deck[slot].name} → ${t ? t.name : 'target'}`, true);
+  }
+
   // ---------- aim: tell the game what's under the mouse (for real hotbar costs) ----------
 
   let aimDirty = false;
   let lastAimSent = null;
   setInterval(() => {
-    if (!aimDirty || !conn?.open || !$('view-stage').classList.contains('active') || ultActive() || chatOpen()) return;
+    if (!aimDirty || !conn?.open || !$('view-stage').classList.contains('active') || ultActive() || chatOpen() || hoverTag) return;
     aimDirty = false;
     const p = toGame(mouse.x, mouse.y);
     const key = p ? `${p.x.toFixed(3)},${p.y.toFixed(3)}` : 'none';
@@ -406,6 +461,7 @@ const Guest = (() => {
     state = next;
     renderHackBar();
     renderFocus();
+    renderTags();
     renderUlt();
     renderMenu();
 
@@ -584,6 +640,7 @@ const Guest = (() => {
       $('reticle').style.top = e.clientY + 'px';
       wakeConsole();
       updateHover();
+      updateTagHover();
       aimDirty = true;
     });
 
@@ -593,6 +650,12 @@ const Guest = (() => {
       if (ultActive()) {                            // the radar takes the clicks
         if (e.button === 0) ultHack(selected);
         if (e.button === 2 && hoverId) send({ cmd: 'ultmenu', id: hoverId });
+        return;
+      }
+      if (hoverTag) {                               // focusing over a name tag
+        if (e.button === 0) tagHack(selected);
+        if (e.button === 2) send({ cmd: 'ultmenu', id: hoverTag });
+        if (e.button === 1) { e.preventDefault(); pingAt(e.clientX, e.clientY); }
         return;
       }
       if (e.button === 0) castAt(selected, e.clientX, e.clientY);
@@ -616,9 +679,14 @@ const Guest = (() => {
       }
 
       if (is('ult')) { e.preventDefault(); if (!e.repeat && send({ cmd: 'ult' })) toast('OVERRIDE', true); return; }
-      if (ultActive()) {
+      if (ultActive() || hoverTag) {
         for (let i = 0; i < MAX_SLOTS; i++) {
-          if (kb[`slot${i + 1}`] && is(`slot${i + 1}`)) { e.preventDefault(); select(i); ultHack(i); return; }
+          if (kb[`slot${i + 1}`] && is(`slot${i + 1}`)) {
+            e.preventDefault();
+            select(i);
+            if (ultActive()) ultHack(i); else tagHack(i);
+            return;
+          }
         }
       }
       if (is('focus')) {
