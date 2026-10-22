@@ -307,3 +307,8 @@ button { font: inherit; cursor: pointer; }
 #hack-menu { z-index: 4; }
 #stage-toast { z-index: 5; }
 #reticle { z-index: 6; }
+
+/* hotbar: real cost for the target under the mouse */
+.aim-label { font-size: 11px; color: var(--muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hack-slot.exact .cost { color: var(--green); }
+.hack-slot.unavailable { opacity: 0.35; }

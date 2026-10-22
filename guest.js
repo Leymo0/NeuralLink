@@ -248,6 +248,20 @@ const Guest = (() => {
     document.querySelector('.focus-meter').classList.toggle('active', !!f[2]);
   }
 
+  // ---------- aim: tell the game what's under the mouse (for real hotbar costs) ----------
+
+  let aimDirty = false;
+  let lastAimSent = null;
+  setInterval(() => {
+    if (!aimDirty || !conn?.open || !$('view-stage').classList.contains('active') || ultActive() || chatOpen()) return;
+    aimDirty = false;
+    const p = toGame(mouse.x, mouse.y);
+    const key = p ? `${p.x.toFixed(3)},${p.y.toFixed(3)}` : 'none';
+    if (key === lastAimSent) return;
+    lastAimSent = key;
+    conn.send({ type: 'cmd', cmd: 'aim', ...(p || {}) });
+  }, 250);
+
   // ---------- ULTIMATE: OVERRIDE radar ----------
 
   let hoverId = null;
@@ -425,20 +439,34 @@ const Guest = (() => {
     if (!deck.length) return note('No quickhacks — he needs a cyberdeck (or turn on the experimental mode on his Host screen)');
     if (selected >= deck.length) selected = 0;
 
+    // Real costs for the target under the mouse, when there is one (else the base cost)
+    const aim = !ultActive() && state.aim && state.aim.kind === 'npc' ? state.aim : null;
+    const free = ultActive();
+    const label = document.createElement('span');
+    label.className = 'aim-label';
+    label.textContent = free ? 'FREE' : aim ? `→ ${aim.name || 'target'}` : state.aim?.kind === 'device' ? `→ ${state.aim.name || 'device'} (menu)` : 'base cost';
+    bar.appendChild(label);
+
     deck.forEach((hack, i) => {
+      const real = aim?.costs?.[i];
+      const notHere = real && real.cost < 0;
+      const shownCost = free ? 0 : real && real.cost >= 0 ? real.cost : hack.cost;
       const el = document.createElement('div');
       el.className = 'hack-slot'
         + (i === selected ? ' selected' : '')
-        + (hack.cost > ram[0] ? ' poor' : '')
+        + (!free && !notHere && shownCost > ram[0] ? ' poor' : '')
+        + (notHere || (real && !real.usable) ? ' unavailable' : '')
+        + (real && real.cost >= 0 ? ' exact' : '')
         + (hack.ultimate ? ' ultimate' : '');
-      el.title = `${hack.name} — ${hack.cost} RAM${hack.ultimate ? ' (ultimate)' : ''}`;
+      el.title = notHere ? `${hack.name} doesn't work on this target`
+        : `${hack.name} — ${shownCost} RAM${real ? ' on this target' : ' (base)'}${real && !real.usable ? ' · not available right now' : ''}`;
       const key = document.createElement('b');
       key.textContent = keyLabel(settings.keybinds[`slot${i + 1}`] || '');
       const name = document.createElement('span');
       name.textContent = hack.name;
       const cost = document.createElement('span');
       cost.className = 'cost';
-      cost.textContent = hack.cost;
+      cost.textContent = notHere ? '–' : free ? '0' : shownCost;
       el.append(key, name, cost);
       el.addEventListener('mousedown', (e) => { e.stopPropagation(); select(i); });
       bar.appendChild(el);
@@ -556,6 +584,7 @@ const Guest = (() => {
       $('reticle').style.top = e.clientY + 'px';
       wakeConsole();
       updateHover();
+      aimDirty = true;
     });
 
     overlay.addEventListener('mousedown', (e) => {

@@ -15,6 +15,7 @@
     menuclose|               -> close the open menu
     lock|<0 or 1>            -> 1 = the host may hack too, 0 = only Peri (default)
     virtual|<0 or 1>         -> EXPERIMENTAL: Peri's own cyberdeck when he has none
+    aim|<x> <y> (or aim|)    -> Peri's mouse position: report real hotbar costs for that target
     ult|                     -> ULTIMATE: radar of everything around V, no RAM, slow time (6 s)
     ulthack|<id> <slot>      -> during the ultimate: upload deck slot to radar target <id>
     ultmenu|<id>             -> during the ultimate: open radar target <id>'s hack menu
@@ -86,6 +87,8 @@ local Coop = {
     ultCdLeft      = 0,
     ultTargets     = {},     -- id -> { obj, kind, name } while the ultimate is active
     ultList        = {},     -- what Peri's radar shows: { {id, name, kind, x, y} }
+    aim            = nil,    -- what's under Peri's mouse: { id, name, kind, costs = { {cost, usable}, ... } }
+    aimAt          = 0,      -- when aim was last computed (os.clock)
     vram           = 4,
     vramMax        = 4,
 }
@@ -352,6 +355,7 @@ local function handleHackResult(ok, res, fallbackName, tx, ty)
         setResult(false, text or res)
     end
     refreshDeck()
+    Coop.aimAt = 0   -- recompute hotbar costs (a hack may now be cooling down)
 end
 
 -- Open the game's own hack menu for the target nearest (sx, sy) — NPC or device.
@@ -426,6 +430,37 @@ local function castSlot(slot, sx, sy)
         return target:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
     end)
     handleHackResult(ok, res, hackName, tx, ty)
+end
+
+-- ---------------------------------------------------------------------------
+-- Real hotbar costs for whatever is under Peri's mouse
+-- ---------------------------------------------------------------------------
+
+local function updateAim(sx, sy)
+    if not sx or not scriptsLoaded() then
+        Coop.aim = nil
+        return
+    end
+    local target, _, _, kind = getTargetNear(sx, sy, nil)
+    if not target then
+        Coop.aim = nil
+        return
+    end
+    local id = tostring(target:GetEntityID().hash)
+    -- Same target as before and fresh enough: keep it (building the list isn't free)
+    if Coop.aim and Coop.aim.id == id and os.clock() - Coop.aimAt < 1.0 then return end
+
+    local aim = { id = id, kind = kind, costs = {} }
+    pcall(function() aim.name = target:PeriLinkName() end)
+    if kind == "npc" then
+        pcall(function()
+            for _, line in ipairs(target:PeriLinkSlotCosts(Coop.virtualEnabled, Coop.ultLeft > 0) or {}) do
+                local cost, usable = line:match("^(%-?%d+)|([01])$")
+                aim.costs[#aim.costs + 1] = { cost = tonumber(cost) or -1, usable = usable == "1" }
+            end
+        end)
+    end
+    Coop.aim, Coop.aimAt = aim, os.clock()
 end
 
 -- ---------------------------------------------------------------------------
@@ -554,11 +589,20 @@ local function writeState()
     end
     local ult = string.format('{"left":%.1f,"cd":%.1f,"duration":%.1f,"cooldown":%.1f,"radius":%d,"targets":[%s]}',
         Coop.ultLeft, Coop.ultCdLeft, Coop.ultDuration, Coop.ultCooldown, Coop.ultRadius, table.concat(targets, ","))
+    local aim = "null"
+    if Coop.aim then
+        local costs = {}
+        for _, c in ipairs(Coop.aim.costs) do
+            costs[#costs + 1] = string.format('{"cost":%d,"usable":%s}', c.cost, tostring(c.usable))
+        end
+        aim = string.format('{"id":%s,"name":%s,"kind":%s,"costs":[%s]}',
+            jsonString(Coop.aim.id), jsonString(Coop.aim.name or ""), jsonString(Coop.aim.kind or ""), table.concat(costs, ","))
+    end
     local text = string.format(
-        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"ult":%s,"deck":[%s],"menu":%s,"results":[%s]}',
+        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"ult":%s,"aim":%s,"deck":[%s],"menu":%s,"results":[%s]}',
         tostring(Coop.scriptsOk == true), tostring(Coop.hostCanHack), tostring(Coop.virtualActive),
         Coop.virtualActive and Coop.vram or (Coop.ram[1] or 0), Coop.ram[2] or 0,
-        Coop.focusLeft, Coop.focusMax, tostring(Coop.focusHeld), ult,
+        Coop.focusLeft, Coop.focusMax, tostring(Coop.focusHeld), ult, aim,
         table.concat(parts, ","), menu, table.concat(res, ","))
     if text == lastStateText then return end
     local f = io.open(OUTBOX, "w")
@@ -605,6 +649,9 @@ local function handleCommand(cmd, arg)
         Coop.menu = nil
     elseif cmd == "focus" then
         if arg == "1" then startFocus() else stopFocus() end
+    elseif cmd == "aim" then
+        updateAim(parsePoint(arg))
+        writeState()
     elseif cmd == "ult" then
         startUltimate()
     elseif cmd == "ulthack" then

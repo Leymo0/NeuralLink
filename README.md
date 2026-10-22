@@ -114,6 +114,7 @@ Never reinstall — just click:
 | Key | Does |
 |---|---|
 | **1 – 8** | Upload his quickhack from that slot to the enemy under your mouse |
+| *(just pointing)* | The hotbar shows each hack's **real cost on the target under your mouse** (green), "–" if it doesn't work there |
 | **Left-click** | Upload the selected quickhack where you click (click a slot in the bar to select it). Clicking a **device** (camera, turret, door…) opens its hack menu |
 | **Right-click** | Scan: open the game's hack menu for whatever is under the mouse (NPC or device). Pick with **1–9** or click; **Esc** closes |
 | **Hold Space** | Focus: time nearly stops while you aim. Drains a 6-second meter that refills when you let go |

@@ -267,6 +267,7 @@ ipcMain.handle('game:command', (_e, c) => {
     case 'lock':  return writeToGame('lock', c.allowed ? '1' : '0');
     case 'virtual': return writeToGame('virtual', c.on ? '1' : '0');
     case 'ult':   return writeToGame('ult');
+    case 'aim':   return writeToGame('aim', pt);   // empty = nothing under the mouse
     case 'ulthack': {
       const id = String(c.id || ''), slot = Number(c.slot);
       if (!/^[\w-]{1,40}$/.test(id) || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return false;

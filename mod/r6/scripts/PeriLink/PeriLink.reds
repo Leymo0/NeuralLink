@@ -426,6 +426,32 @@ public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram:
   return PeriLinkApi.Pick(player, this, this.PeriLinkCommandsFor(virtualMode, free, virtualEnabled), index, title, budget);
 }
 
+// Real cost of each hotbar slot against this NPC, for Peri's hotbar.
+// One line per deck slot: "<cost>|<usable 0/1>", or "-1|0" if that hack doesn't apply here.
+@addMethod(ScriptedPuppet)
+public func PeriLinkSlotCosts(virtualEnabled: Bool, free: Bool) -> array<String> {
+  let player = GetPlayer(this.GetGame());
+  let lines: array<String>;
+  if !IsDefined(player) { return lines; }
+  let virtualMode = PeriLinkApi.UsingVirtual(player, virtualEnabled);
+  let deck = PeriLinkApi.GetDeckFor(player, virtualEnabled);
+  let commands = this.PeriLinkCommandsFor(virtualMode, free, virtualEnabled);
+  for q in deck {
+    let cost = -1;
+    let usable = false;
+    for cmd in commands {
+      if Equals(cmd.m_itemID, q.itemID) {
+        if cost < 0 || (PeriLinkApi.IsUsable(cmd) && !usable) {
+          cost = cmd.m_cost;
+          usable = PeriLinkApi.IsUsable(cmd);
+        }
+      }
+    }
+    ArrayPush(lines, IntToString(cost) + "|" + (usable ? "1" : "0"));
+  }
+  return lines;
+}
+
 // Peri casts slot N of his deck on this NPC. Returns "ok|<hack>" or "fail|<reason>".
 @addMethod(ScriptedPuppet)
 public func PeriLinkCast(slot: Int32, virtualEnabled: Bool, ram: Int32, free: Bool) -> String {

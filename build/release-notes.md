@@ -1,12 +1,11 @@
-**NeuralLink 0.5.0** — the ULTIMATE update.
+**NeuralLink 0.5.1**
 
-### New: OVERRIDE (Peri presses F)
-- 6 seconds of slowed time and a **radar map** of everything hackable around V (people, cameras, turrets…), even behind him or behind walls
-- Hover a name → **1–8** to hack, **right-click** for the full hack menu
-- **No RAM** needed while it lasts
-- Costs V 10% health, never fatal · 60 s cooldown
+### Hotbar shows real costs
+- Point at someone and the hotbar shows the **real RAM cost of each hack on that target** (green numbers), the same price the scan menu shows.
+- Hacks that don't work on that target show "–"; hacks you can't afford are greyed out.
+- Pointing at nothing shows the base costs; pointing at a device says "(menu)"; during OVERRIDE everything says FREE.
 
 ### How to update
-Already have NeuralLink? Just click **Install / Update** (Host) or **Check for updates** (home screen). First time? Download **NeuralLink-Setup-0.5.0.exe** below.
+Click **Install / Update** (Host, with Cyberpunk closed) or **Check for updates** (home screen).
 
-Bundled third-party mods: [Cyber Engine Tweaks](https://github.com/maximegmd/CyberEngineTweaks) and [redscript](https://github.com/jac3km4/redscript) (MIT).
+Includes the OVERRIDE ultimate from 0.5.0. Bundled third-party mods: [Cyber Engine Tweaks](https://github.com/maximegmd/CyberEngineTweaks) and [redscript](https://github.com/jac3km4/redscript) (MIT).

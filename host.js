@@ -13,6 +13,7 @@ const Host = (() => {
   let lastStateJson = '';
   let lastState = null;  // his deck + RAM, as reported by the mod
   let lastHeartbeat = 0;
+  let lastAimAt = 0;
 
   // ---------- UI helpers ----------
 
@@ -184,6 +185,17 @@ const Host = (() => {
       return;
     }
     if (msg.type !== 'cmd') return;
+
+    // Aim updates are frequent and harmless: rate-limit them separately, never log them
+    if (msg.cmd === 'aim') {
+      const t = Date.now();
+      if (t - lastAimAt < 150) return;
+      lastAimAt = t;
+      const x = Number(msg.x), y = Number(msg.y);
+      const has = x >= 0 && x <= 1 && y >= 0 && y <= 1;
+      window.neural.sendToGame(has ? { cmd: 'aim', x, y } : { cmd: 'aim' });
+      return;
+    }
 
     // Flood guard: at most 8 commands per second
     const now = Date.now();
