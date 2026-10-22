@@ -47,10 +47,24 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          npx electron-builder --win nsis --x64 --publish never 2>&1 | Tee-Object -FilePath build.log
+          # The log goes OUTSIDE the project folder: a file that grows while the app is being
+          # packed corrupts the package (this broke releases 0.4.0–0.6.2).
+          $log = Join-Path $env:RUNNER_TEMP 'build.log'
+          npx electron-builder --win nsis --x64 --publish never 2>&1 | Tee-Object -FilePath $log
           if ($LASTEXITCODE -ne 0) {
-            $tail = (Get-Content build.log -Tail 20) -join ' || '
+            $tail = (Get-Content $log -Tail 20) -join ' || '
             Write-Output "::error title=Build failed::$tail"
+            exit 1
+          }
+
+      # Never publish a broken app: read every file back out of the packed app and check it
+      - name: Verify the packed app
+        shell: pwsh
+        run: |
+          $out = node scripts/verify-asar.js dist/win-unpacked/resources/app.asar 2>&1
+          Write-Host ($out -join "`n")
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Packed app is broken::$($out -join ' || ')"
             exit 1
           }
 

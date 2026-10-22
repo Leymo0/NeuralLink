@@ -1,7 +1,7 @@
 {
   "name": "neurallink",
   "productName": "NeuralLink",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "private": true,
   "description": "Cyberpunk 2077 co-op: one plays, the Operator watches, hacks and talks in his head",
   "main": "main.js",
@@ -15,6 +15,7 @@
     "peerjs": "^1.5.5"
   },
   "devDependencies": {
+    "@electron/asar": "^4.3.1",
     "electron": "^38.0.0",
     "electron-builder": "^26.15.3"
   },
@@ -33,7 +34,9 @@
       "!build/icon.ico",
       "!README.md",
       "!.github/**",
-      "!build/release-notes.md"
+      "!build/release-notes.md",
+      "!**/*.log",
+      "!scripts/**"
     ],
     "extraResources": [
       {
