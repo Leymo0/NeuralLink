@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' https: wss:">
+<title>NeuralLink</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============================== HOME ============================== -->
+<section id="view-home" class="view active">
+  <div class="home">
+    <div class="brand">
+      <div class="brand-mark">NEURAL<span>LINK</span></div>
+      <div class="brand-sub">one V · two brains</div>
+    </div>
+    <div class="choices">
+      <button class="choice" id="go-host">
+        <span class="choice-title">HOST</span>
+        <span class="choice-desc">I play the game. Share my screen and let the Operator into my head.</span>
+      </button>
+      <button class="choice choice-alt" id="go-join">
+        <span class="choice-title">JOIN</span>
+        <span class="choice-desc">I'm the Operator. Enter a room code, watch, hack and talk.</span>
+      </button>
+    </div>
+    <div class="home-update">
+      <span id="app-version" class="muted">NeuralLink</span>
+      <button id="home-update" class="small">Check for updates</button>
+      <span id="home-update-status" class="update-status" hidden></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== HOST ============================== -->
+<section id="view-host" class="view">
+  <header class="bar">
+    <button class="back" data-back>← Back</button>
+    <h1>HOST</h1>
+    <div id="host-status" class="status">Offline</div>
+  </header>
+
+  <div class="host-grid">
+    <div class="panel">
+      <h2>1 · Game & mod</h2>
+      <div class="row">
+        <span class="label">Game folder</span>
+        <span id="game-folder" class="value muted">Not found</span>
+        <button id="pick-folder" class="small">Choose…</button>
+      </div>
+      <div class="row">
+        <span class="label">Cyber Engine Tweaks</span>
+        <span id="cet-status" class="value">—</span>
+      </div>
+      <div class="row">
+        <span class="label">redscript</span>
+        <span id="reds-status" class="value">—</span>
+      </div>
+      <div class="row">
+        <span class="label">NeuralLink mod</span>
+        <span id="mod-status" class="value">—</span>
+      </div>
+      <div class="row install-row">
+        <button id="install-mod" class="primary">Install / Update</button>
+        <span class="muted small-text">Updates NeuralLink, CET, redscript and the mod. Close the game first.</span>
+      </div>
+      <div id="update-status" class="update-status" hidden></div>
+      <label class="check"><input type="checkbox" id="only-peri"> Only Peri can hack (I can't upload quickhacks myself)</label>
+      <label class="check experimental"><input type="checkbox" id="virtual-deck"> <b>EXPERIMENTAL</b> — Peri brings her own cyberdeck (she can hack even when I'm not wearing one)</label>
+    </div>
+
+    <div class="panel">
+      <h2 class="h2-row">2 · What to share <button id="refresh-sources" class="small">↻ Refresh</button></h2>
+      <p class="muted small-text">Started Cyberpunk after opening this? It shows up within a few seconds. Sharing the whole screen works too.</p>
+      <div id="sources" class="sources"></div>
+      <label class="check"><input type="checkbox" id="share-audio"> Share game sound (also shares other PC sounds, like Discord voice)</label>
+    </div>
+
+    <div class="panel room-panel">
+      <h2>3 · Room</h2>
+      <div id="room-idle">
+        <button id="start-host" class="primary">Start room</button>
+      </div>
+      <div id="room-live" hidden>
+        <div class="room-code-label">ROOM CODE</div>
+        <div id="room-code" class="room-code">------</div>
+        <button id="copy-code" class="small">Copy</button>
+        <button id="stop-host" class="small danger">Close room</button>
+      </div>
+      <video id="host-preview" muted autoplay playsinline></video>
+    </div>
+
+    <div class="panel log-panel">
+      <h2>From Peri</h2>
+      <ul id="host-log" class="log"></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== JOIN ============================== -->
+<section id="view-join" class="view">
+  <header class="bar">
+    <button class="back" data-back>← Back</button>
+    <h1>JOIN</h1>
+    <div class="status muted">Operator</div>
+  </header>
+
+  <div class="join-wrap">
+    <div class="panel join-panel">
+      <h2>Room code</h2>
+      <input id="join-code" class="code-input" maxlength="6" placeholder="ABC123" spellcheck="false" autocomplete="off">
+      <button id="join-btn" class="primary">Jack in</button>
+      <div id="join-error" class="error"></div>
+    </div>
+
+    <div class="panel profile-panel">
+      <h2>You appear as</h2>
+      <input id="op-name" class="name-input" maxlength="20" spellcheck="false" autocomplete="off">
+      <div id="icon-picker" class="icon-picker">
+        <button class="icon-choice" data-icon="peri1"><img src="assets/icons/peri1.png" alt="Icon 1"></button>
+        <button class="icon-choice" data-icon="peri2"><img src="assets/icons/peri2.png" alt="Icon 2"></button>
+        <button class="icon-choice" data-icon="peri3"><img src="assets/icons/peri3.png" alt="Icon 3"></button>
+      </div>
+      <div class="caller-preview">
+        <img id="preview-icon" alt="">
+        <div>
+          <div id="preview-name" class="caller-name">PeriBot</div>
+          <div class="caller-sub">CONNECTION: INSIDE YOUR HEAD</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Your keybinds</h2>
+      <p class="muted small-text">Click a key to change it. Left-click casts the selected hack, right-click scans, middle-click pings.</p>
+      <div id="keybinds" class="keybinds"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== STAGE (Operator watching) ============================== -->
+<section id="view-stage" class="view stage">
+  <video id="stage-video" autoplay playsinline></video>
+  <div id="stage-overlay">
+    <div id="reticle"></div>
+    <div id="stage-top">
+      <span class="link-dot"></span><span id="stage-status">LINKED</span>
+      <span id="stage-latency" class="muted"></span>
+    </div>
+    <div id="stage-console">
+      <div id="ram" class="ram" title="His RAM">
+        <span id="ram-label" class="ram-label">RAM</span>
+        <span class="ram-track"><span id="ram-fill" class="ram-fill"></span></span>
+        <span id="ram-text" class="ram-text">–/–</span>
+      </div>
+      <div id="hack-bar" class="hack-bar"><span class="muted">Waiting for his cyberdeck…</span></div>
+      <div class="focus-meter" title="Focus: hold to slow everything while you aim">
+        <b data-key="focus">Space</b>Focus <span class="ram-track"><span id="focus-fill" class="focus-fill"></span></span>
+      </div>
+      <div class="slot"><b>R-click</b>Scan</div>
+      <div class="slot"><b data-key="ping">Q</b>Ping</div>
+      <div class="slot"><b data-key="chat">Enter</b>Talk</div>
+      <label class="vol">🔊 <input type="range" id="volume" min="0" max="1" step="0.05" value="0.8"></label>
+      <button id="leave" class="small danger">Unplug</button>
+    </div>
+    <div id="chat">
+      <div class="chat-icons">
+        <button class="chat-icon" data-icon="peri1"><img src="assets/icons/peri1.png" alt="Icon 1"></button>
+        <button class="chat-icon" data-icon="peri2"><img src="assets/icons/peri2.png" alt="Icon 2"></button>
+        <button class="chat-icon" data-icon="peri3"><img src="assets/icons/peri3.png" alt="Icon 3"></button>
+      </div>
+      <div class="chat-body">
+        <label><span id="chat-name">PeriBot</span> → HOST · Tab: switch icon · Enter: send · Esc: cancel</label>
+        <input id="chat-input" maxlength="220" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div id="hack-menu" hidden>
+      <div class="menu-head"><span id="menu-name">Target</span><span class="menu-hint">1–9 or click · Esc closes</span></div>
+      <ol id="menu-items"></ol>
+    </div>
+    <div id="stage-toast"></div>
+    <div id="stage-lost" hidden>
+      <div class="lost-box">
+        <div class="lost-title">LINK LOST</div>
+        <button id="rejoin" class="primary">Reconnect</button>
+        <button id="lost-leave" class="small">Back</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="node_modules/peerjs/dist/peerjs.min.js"></script>
+<script src="shared.js"></script>
+<script src="host.js"></script>
+<script src="guest.js"></script>
+</body>
+</html>

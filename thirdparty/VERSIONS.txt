@@ -1,0 +1,8 @@
+Bundled third-party mods (installed into the game folder by "Install everything"):
+
+- Cyber Engine Tweaks 1.37.1 ("Scripting fixes") — MIT License, https://github.com/maximegmd/CyberEngineTweaks
+  License: game/bin/x64/LICENSE
+- redscript 0.5.31 — MIT License, https://github.com/jac3km4/redscript
+
+When the game updates and these stop working, download newer versions and replace
+the files under thirdparty/game (same folder layout as the game folder).
