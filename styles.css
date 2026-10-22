@@ -274,3 +274,36 @@ button { font: inherit; cursor: pointer; }
 .update-status.ok { color: var(--green); }
 .update-status.warn { color: var(--yellow); }
 .home-update { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; }
+
+/* ---------- ULTIMATE: OVERRIDE radar ---------- */
+.ult-slot.ready { border-color: rgba(247, 225, 76, 0.6); color: var(--ink); }
+.ult-slot.active { border-color: var(--yellow); box-shadow: 0 0 12px rgba(247, 225, 76, 0.5); color: var(--yellow); }
+#radar {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(circle at center, rgba(20, 0, 8, 0.82), rgba(5, 0, 2, 0.94));
+  cursor: crosshair;
+}
+.radar-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-family: var(--mono); font-size: 13px; }
+.radar-title { color: var(--yellow); letter-spacing: 0.3em; font-weight: 700; text-shadow: 0 0 12px rgba(247, 225, 76, 0.6); }
+.radar-track { width: 160px; height: 6px; background: rgba(247, 225, 76, 0.15); display: inline-block; }
+#radar-fill { display: block; height: 100%; background: var(--yellow); }
+#radar-time { color: var(--yellow); min-width: 40px; }
+.radar-hint { color: var(--muted); font-size: 11px; }
+#radar-field { position: relative; width: min(78vh, 90vw); height: min(78vh, 90vw); border-radius: 50%; border: 1px solid rgba(255, 59, 78, 0.5);
+  background: repeating-conic-gradient(from 0deg, rgba(255, 59, 78, 0.04) 0deg 2deg, transparent 2deg 30deg); }
+.radar-ring { position: absolute; border: 1px dashed rgba(255, 59, 78, 0.25); border-radius: 50%; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.radar-ring.r1 { width: 25%; height: 25%; } .radar-ring.r2 { width: 50%; height: 50%; } .radar-ring.r3 { width: 75%; height: 75%; }
+.radar-v { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--cyan); font-size: 20px; text-shadow: 0 0 10px var(--cyan); }
+.radar-dot { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 6px; white-space: nowrap; pointer-events: none;
+  font-family: var(--mono); font-size: 12px; color: #ffd2d6; }
+.radar-dot i { width: 10px; height: 10px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); flex-shrink: 0; }
+.radar-dot.device i { border-radius: 2px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.radar-dot.device { color: #c9fbf6; }
+.radar-dot.hover { color: var(--yellow); z-index: 2; }
+.radar-dot.hover i { background: var(--yellow); box-shadow: 0 0 14px var(--yellow); transform: scale(1.5); }
+.radar-dot span { background: rgba(10, 0, 4, 0.7); padding: 1px 4px; }
+/* keep the hotbar, menu and messages above the radar */
+#stage-console { z-index: 3; }
+#hack-menu { z-index: 4; }
+#stage-toast { z-index: 5; }
+#reticle { z-index: 6; }

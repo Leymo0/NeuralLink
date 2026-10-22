@@ -121,6 +121,27 @@ public class PeriLinkApi {
     return PeriLinkApi.GetDeck(player);
   }
 
+  // Every quickhack action Peri can use right now (not grouped): his deck, or the virtual one
+  public static func GetDeckAllFor(player: ref<PlayerPuppet>, virtualEnabled: Bool) -> array<PlayerQuickhackData> {
+    if PeriLinkApi.UsingVirtual(player, virtualEnabled) {
+      return PeriLinkApi.GetVirtualDeckAll();
+    }
+    return RPGManager.GetPlayerQuickHackListWithQuality(player);
+  }
+
+  // Ultimate side effect: take `percent` of max health, but never go below `floor` percent.
+  // Never fatal. Returns the health % after.
+  public static func Hurt(player: ref<PlayerPuppet>, percent: Float, floor: Float) -> Float {
+    let pools = GameInstance.GetStatPoolsSystem(player.GetGame());
+    let id = Cast<StatsObjectID>(player.GetEntityID());
+    let current = pools.GetStatPoolValue(id, gamedataStatPoolType.Health, true);
+    let target = MaxF(current - percent, MinF(current, floor));
+    if target < current {
+      pools.RequestSettingStatPoolValue(id, gamedataStatPoolType.Health, target, player, true);
+    }
+    return target;
+  }
+
   public static func GetLevel(player: ref<PlayerPuppet>) -> Float {
     return GameInstance.GetStatsSystem(player.GetGame()).GetStatValue(Cast<StatsObjectID>(player.GetEntityID()), gamedataStatType.Level);
   }
@@ -168,7 +189,9 @@ public class PeriLinkApi {
     if !IsDefined(ts) {
       return false;
     }
-    let reason = (mode == 1) ? n"PeriLinkBurst" : n"PeriLinkFocus";
+    let reason = n"PeriLinkFocus";
+    if mode == 1 { reason = n"PeriLinkBurst"; }
+    if mode == 3 { reason = n"PeriLinkUltimate"; }
     if on {
       ts.SetIgnoreTimeDilationOnLocalPlayerZero(mode == 1);
       // Same as the Sandevistan: a long duration (999 s), switched off by us on release
@@ -314,6 +337,12 @@ public func PeriLinkName() -> String {
 // Mirrors the game's own checks; RAM is paid from Peri's pool, not his.
 @addMethod(ScriptedPuppet)
 public func PeriLinkBuildVirtualCommands() -> array<ref<QuickhackData>> {
+  return this.PeriLinkBuildFreeCommands(PeriLinkApi.GetVirtualDeckAll());
+}
+
+// Builds this NPC's list from any deck, ignoring RAM (Peri pays, or the ultimate makes it free)
+@addMethod(ScriptedPuppet)
+public func PeriLinkBuildFreeCommands(deckAll: array<PlayerQuickhackData>) -> array<ref<QuickhackData>> {
   let player = GetPlayer(this.GetGame());
   let context = this.GetPS().GenerateContext(gamedeviceRequestType.Remote, Device.GetInteractionClearance(), player, this.GetEntityID());
   let records: array<wref<ObjectAction_Record>>;
@@ -325,7 +354,7 @@ public func PeriLinkBuildVirtualCommands() -> array<ref<QuickhackData>> {
   let uploading = this.HasActiveQuickHackUpload();
   let commands: array<ref<QuickhackData>>;
 
-  for q in PeriLinkApi.GetVirtualDeckAll() {
+  for q in deckAll {
     for action in actions {
       if Equals(q.actionRecord.ActionName(), action.GetObjectActionRecord().ActionName()) {
         if q.actionRecord.Priority() >= action.GetObjectActionRecord().Priority() {
@@ -366,8 +395,12 @@ public func PeriLinkBuildVirtualCommands() -> array<ref<QuickhackData>> {
   return commands;
 }
 
+// free = ultimate active: no RAM needed, any deck
 @addMethod(ScriptedPuppet)
-public func PeriLinkCommandsFor(virtualMode: Bool) -> array<ref<QuickhackData>> {
+public func PeriLinkCommandsFor(virtualMode: Bool, free: Bool, virtualEnabled: Bool) -> array<ref<QuickhackData>> {
+  if free {
+    return this.PeriLinkBuildFreeCommands(PeriLinkApi.GetDeckAllFor(GetPlayer(this.GetGame()), virtualEnabled));
+  }
   if virtualMode {
     return this.PeriLinkBuildVirtualCommands();
   }
@@ -376,30 +409,33 @@ public func PeriLinkCommandsFor(virtualMode: Bool) -> array<ref<QuickhackData>> 
 
 // virtualEnabled: experimental mode switched on. ram: Peri's virtual RAM (used only in virtual mode).
 @addMethod(ScriptedPuppet)
-public func PeriLinkMenu(virtualEnabled: Bool) -> array<String> {
+public func PeriLinkMenu(virtualEnabled: Bool, free: Bool) -> array<String> {
   let virtualMode = PeriLinkApi.UsingVirtual(GetPlayer(this.GetGame()), virtualEnabled);
-  return PeriLinkApi.DescribeCommands(this.PeriLinkCommandsFor(virtualMode));
+  return PeriLinkApi.DescribeCommands(this.PeriLinkCommandsFor(virtualMode, free, virtualEnabled));
 }
 
 @addMethod(ScriptedPuppet)
-public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram: Int32) -> String {
+public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram: Int32, free: Bool) -> String {
   if this.IsDead() || ScriptedPuppet.IsDefeated(this) {
     return "fail|Target is down";
   }
   let player = GetPlayer(this.GetGame());
   let virtualMode = PeriLinkApi.UsingVirtual(player, virtualEnabled);
-  return PeriLinkApi.Pick(player, this, this.PeriLinkCommandsFor(virtualMode), index, title, virtualMode ? ram : -1);
+  let budget = -1;
+  if virtualMode && !free { budget = ram; }
+  return PeriLinkApi.Pick(player, this, this.PeriLinkCommandsFor(virtualMode, free, virtualEnabled), index, title, budget);
 }
 
 // Peri casts slot N of his deck on this NPC. Returns "ok|<hack>" or "fail|<reason>".
 @addMethod(ScriptedPuppet)
-public func PeriLinkCast(slot: Int32, virtualEnabled: Bool, ram: Int32) -> String {
+public func PeriLinkCast(slot: Int32, virtualEnabled: Bool, ram: Int32, free: Bool) -> String {
   let player = GetPlayer(this.GetGame());
   if !IsDefined(player) {
     return "fail|No player";
   }
   let virtualMode = PeriLinkApi.UsingVirtual(player, virtualEnabled);
-  let budget = virtualMode ? ram : -1;
+  let budget = -1;
+  if virtualMode && !free { budget = ram; }
   let deck = PeriLinkApi.GetDeckFor(player, virtualEnabled);
   if slot < 0 || slot >= ArraySize(deck) {
     return "fail|Empty slot";
@@ -412,7 +448,7 @@ public func PeriLinkCast(slot: Int32, virtualEnabled: Bool, ram: Int32) -> Strin
   }
 
   // The program's variants all share its item; use one that works on this target
-  let commands = this.PeriLinkCommandsFor(virtualMode);
+  let commands = this.PeriLinkCommandsFor(virtualMode, free, virtualEnabled);
   let fallback = -1;
   let i = 0;
   while i < ArraySize(commands) {
@@ -492,24 +528,26 @@ public func PeriLinkBuildVirtualCommands() -> array<ref<QuickhackData>> {
 }
 
 @addMethod(Device)
-public func PeriLinkCommandsFor(virtualMode: Bool) -> array<ref<QuickhackData>> {
-  if virtualMode {
+public func PeriLinkCommandsFor(virtualMode: Bool, free: Bool) -> array<ref<QuickhackData>> {
+  if virtualMode || free {
     return this.PeriLinkBuildVirtualCommands();
   }
   return this.PeriLinkBuildCommands();
 }
 
 @addMethod(Device)
-public func PeriLinkMenu(virtualEnabled: Bool) -> array<String> {
+public func PeriLinkMenu(virtualEnabled: Bool, free: Bool) -> array<String> {
   let virtualMode = PeriLinkApi.UsingVirtual(GetPlayer(this.GetGame()), virtualEnabled);
-  return PeriLinkApi.DescribeCommands(this.PeriLinkCommandsFor(virtualMode));
+  return PeriLinkApi.DescribeCommands(this.PeriLinkCommandsFor(virtualMode, free));
 }
 
 @addMethod(Device)
-public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram: Int32) -> String {
+public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram: Int32, free: Bool) -> String {
   let player = GetPlayer(this.GetGame());
   let virtualMode = PeriLinkApi.UsingVirtual(player, virtualEnabled);
-  return PeriLinkApi.Pick(player, this, this.PeriLinkCommandsFor(virtualMode), index, title, virtualMode ? ram : -1);
+  let budget = -1;
+  if virtualMode && !free { budget = ram; }
+  return PeriLinkApi.Pick(player, this, this.PeriLinkCommandsFor(virtualMode, free), index, title, budget);
 }
 
 // ---------------------------------------------------------------------------

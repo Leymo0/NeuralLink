@@ -198,6 +198,14 @@ const Host = (() => {
       command.name = String(msg.name || 'PeriBot').slice(0, 20);
       command.icon = String(msg.icon || '');
       if (!command.text.trim()) return;
+    } else if (cmd === 'ult') {
+      // nothing to check
+    } else if (cmd === 'ulthack' || cmd === 'ultmenu') {
+      command.id = String(msg.id || '').slice(0, 40);
+      if (cmd === 'ulthack') {
+        command.slot = Number(msg.slot);
+        if (!Number.isInteger(command.slot) || command.slot < 0 || command.slot > 7) return;
+      }
     } else if (cmd === 'focus') {
       command.on = !!msg.on;
     } else if (cmd === 'pick') {
@@ -224,6 +232,9 @@ const Host = (() => {
     if (cmd === 'say') log('say', `${command.name}: ${command.text}`);
     else if (cmd === 'ping') log('act', 'Ping');
     else if (cmd === 'menu') log('act', 'Scanning…');
+    else if (cmd === 'ult') log('act', 'OVERRIDE');
+    else if (cmd === 'ulthack') log('act', `OVERRIDE hack: ${lastState?.deck?.[command.slot]?.name || 'slot ' + (command.slot + 1)}`);
+    else if (cmd === 'ultmenu') log('act', 'OVERRIDE scan');
     else if (cmd === 'pick') log('act', `Hack: ${command.title}`);
     else if (cmd === 'focus') { if (command.on) log('act', 'Focus'); }
     else if (cmd === 'menuclose') { /* quiet */ }

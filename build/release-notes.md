@@ -1,17 +1,12 @@
-**NeuralLink 0.4.0** — Cyberpunk 2077 co-op: he plays, Peri lives in his head.
+**NeuralLink 0.5.0** — the ULTIMATE update.
 
-### Install (once)
-Download **NeuralLink-Setup-0.4.0.exe** below and run it. Windows may say "Windows protected your PC" (the installer isn't signed) → **More info → Run anyway**.
+### New: OVERRIDE (Peri presses F)
+- 6 seconds of slowed time and a **radar map** of everything hackable around V (people, cameras, turrets…), even behind him or behind walls
+- Hover a name → **1–8** to hack, **right-click** for the full hack menu
+- **No RAM** needed while it lasts
+- Costs V 10% health, never fatal · 60 s cooldown
 
-### After that: just click Install / Update
-- **Host:** NeuralLink → HOST → **Install / Update** (Cyberpunk closed). Updates NeuralLink itself, the latest Cyber Engine Tweaks and redscript from their GitHub releases, and the NeuralLink mod — then says **✓ Updated**.
-- **Peri:** home screen → **Check for updates**.
-
-### New in 0.4.0
-- One-click Install / Update for everything
-- Cyber Engine Tweaks and redscript come from their latest GitHub releases (built-in copies used when offline)
-- NeuralLink updates itself from this page
-- Experimental: Peri's own cyberdeck (works when he isn't wearing one)
-- Focus (hold Space) lasts as long as you hold it; share list refreshes by itself
+### How to update
+Already have NeuralLink? Just click **Install / Update** (Host) or **Check for updates** (home screen). First time? Download **NeuralLink-Setup-0.5.0.exe** below.
 
 Bundled third-party mods: [Cyber Engine Tweaks](https://github.com/maximegmd/CyberEngineTweaks) and [redscript](https://github.com/jac3km4/redscript) (MIT).

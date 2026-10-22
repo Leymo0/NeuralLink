@@ -15,6 +15,9 @@
     menuclose|               -> close the open menu
     lock|<0 or 1>            -> 1 = the host may hack too, 0 = only Peri (default)
     virtual|<0 or 1>         -> EXPERIMENTAL: Peri's own cyberdeck when he has none
+    ult|                     -> ULTIMATE: radar of everything around V, no RAM, slow time (6 s)
+    ulthack|<id> <slot>      -> during the ultimate: upload deck slot to radar target <id>
+    ultmenu|<id>             -> during the ultimate: open radar target <id>'s hack menu
 
   The mod writes state.json (his deck, RAM, last hack result) for the app to show Peri.
 
@@ -44,6 +47,14 @@ local Coop = {
     -- Quickhacks
     hostCanHack    = false,  -- false = only Peri can hack (the host app can change this)
 
+    -- ULTIMATE "OVERRIDE": radar of everything around V, hacks cost no RAM, time slows
+    ultDuration    = 6.0,    -- seconds (real time)
+    ultCooldown    = 60.0,
+    ultRadius      = 40,     -- meters around V
+    ultDilation    = 0.1,    -- world speed during the ultimate
+    ultHurtPercent = 10,     -- V loses this % of max health when it starts...
+    ultHealthFloor = 10,     -- ...but never drops below this % (never fatal)
+
     -- EXPERIMENTAL: Peri's own cyberdeck, used when he isn't wearing one (host app toggles it)
     virtualEnabled = false,
     vramBase       = 4,      -- Peri's max RAM = vramBase + his level * vramPerLevel
@@ -71,6 +82,10 @@ local Coop = {
     deck           = {},     -- his equipped quickhacks: { {name, cost, tier, ultimate}, ... }
     ram            = { 0, 0 },
     virtualActive  = false,  -- experimental deck in use right now (enabled + no cyberdeck)
+    ultLeft        = 0,      -- seconds of ultimate remaining
+    ultCdLeft      = 0,
+    ultTargets     = {},     -- id -> { obj, kind, name } while the ultimate is active
+    ultList        = {},     -- what Peri's radar shows: { {id, name, kind, x, y} }
     vram           = 4,
     vramMax        = 4,
 }
@@ -89,6 +104,7 @@ local markers       = {}
 
 local OUTBOX         = "state.json"
 local STATE_INTERVAL = 0.5
+local ultTimer       = 0
 local stateTimer     = 0
 local lastStateText  = ""
 local results        = {}   -- recent hack results for Peri's app: { {seq, ok, text}, ... }
@@ -157,7 +173,8 @@ end
 
 -- Hackable things the game considers visible to V: NPCs and devices
 -- (cameras, turrets, doors, vending machines...). Returns { {obj, kind}, ... }
-local function getVisibleTargets()
+-- everything = true: all targets within radius around V (the ultimate), not just in view
+local function getVisibleTargets(everything, radius)
     local list, seen = {}, {}
     local player = Game.GetPlayer()
     if not player then return list end
@@ -172,8 +189,10 @@ local function getVisibleTargets()
 
     local function query(tsq, accept)   -- VERIFY: TSQ + GetTargetParts
         pcall(function()
-            tsq.maxDistance = Coop.maxHackRange
-            if Coop.throughWalls then
+            tsq.maxDistance = radius or Coop.maxHackRange
+            if everything then
+                pcall(function() tsq.testedSet = TargetingSet.Complete end)   -- VERIFY
+            elseif Coop.throughWalls then
                 -- Frustum = everything in the camera's view cone, even behind walls
                 -- (the default only returns things in clear line of sight)
                 pcall(function() tsq.testedSet = TargetingSet.Frustum end)
@@ -323,7 +342,8 @@ local function handleHackResult(ok, res, fallbackName, tx, ty)
         local name, cost = text:match("^(.*)|(%d+)$")
         if name then
             text = name
-            if Coop.virtualActive then Coop.vram = math.max(0, Coop.vram - tonumber(cost)) end
+            -- (free during the ultimate)
+            if Coop.virtualActive and Coop.ultLeft <= 0 then Coop.vram = math.max(0, Coop.vram - tonumber(cost)) end
         end
         if tx then addMarker(tx, ty, text:upper(), "hack") end
         pushMessage("> " .. text:upper() .. " uploading", "system")
@@ -341,18 +361,18 @@ local function openMenu(sx, sy, target, tx, ty)
         setResult(false, "PeriLink scripts not installed on his PC")
         return
     end
-    if not target then
+    if not target and sx then
         target, tx, ty = getTargetNear(sx, sy, nil)
     end
     if not target then
-        addMarker(sx, sy, "miss", "miss")
+        if sx then addMarker(sx, sy, "miss", "miss") end
         setResult(false, "Nothing hackable there")
         return
     end
 
     local ok = pcall(function()
         local items = {}
-        for _, line in ipairs(target:PeriLinkMenu(Coop.virtualEnabled) or {}) do
+        for _, line in ipairs(target:PeriLinkMenu(Coop.virtualEnabled, Coop.ultLeft > 0) or {}) do
             local name, cost, locked, reason = line:match("^(.-)|(%-?%d+)|([01])|(.*)$")
             if name then
                 items[#items + 1] = { name = name, cost = tonumber(cost), locked = locked == "1", reason = reason }
@@ -362,7 +382,7 @@ local function openMenu(sx, sy, target, tx, ty)
         Coop.menu = { seq = Coop.menuSeq, target = target, name = target:PeriLinkName(), x = tx, y = ty, items = items }
     end)
     if ok then
-        addMarker(tx, ty, "SCANNING", "ping")
+        if tx then addMarker(tx, ty, "SCANNING", "ping") end
     else
         setResult(false, "Couldn't read that target's hacks")
     end
@@ -376,7 +396,7 @@ local function pickFromMenu(seq, index, title)
     end
     Coop.menu = nil
     local ok, res = pcall(function()
-        return menu.target:PeriLinkPick(index, title, Coop.virtualEnabled, math.floor(Coop.vram))
+        return menu.target:PeriLinkPick(index, title, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
     end)
     handleHackResult(ok, res, title ~= "" and title or "Hack", menu.x, menu.y)
 end
@@ -403,9 +423,97 @@ local function castSlot(slot, sx, sy)
     end
 
     local ok, res = pcall(function()
-        return target:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram))
+        return target:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
     end)
     handleHackResult(ok, res, hackName, tx, ty)
+end
+
+-- ---------------------------------------------------------------------------
+-- ULTIMATE: OVERRIDE
+-- ---------------------------------------------------------------------------
+
+-- Everything hackable within ultRadius of V, as radar coordinates
+-- (x = meters to V's right, y = meters in front of V)
+local function refreshUltTargets()
+    local player = Game.GetPlayer()
+    if not player then return end
+    local vpos = player:GetWorldPosition()
+    local fwd = player:GetWorldForward()
+    local fx, fy = fwd.x, fwd.y
+    local len = math.sqrt(fx * fx + fy * fy)
+    if len < 0.001 then fx, fy, len = 0, 1, 1 end
+    fx, fy = fx / len, fy / len
+
+    local found = getVisibleTargets(true, Coop.ultRadius)
+    local targets, list = {}, {}
+    for _, t in ipairs(found) do
+        local ok = pcall(function()
+            local id = tostring(t.obj:GetEntityID().hash)
+            local p = t.obj:GetWorldPosition()
+            local dx, dy = p.x - vpos.x, p.y - vpos.y
+            local ahead = dx * fx + dy * fy
+            local right = dx * fy - dy * fx
+            if dx * dx + dy * dy <= Coop.ultRadius * Coop.ultRadius then
+                local cached = Coop.ultTargets[id]
+                local name = cached and cached.name
+                if not name then
+                    local okName, n = pcall(function() return t.obj:PeriLinkName() end)
+                    name = (okName and n and n ~= "") and n or (t.kind == "npc" and "Person" or "Device")
+                end
+                targets[id] = { obj = t.obj, kind = t.kind, name = name }
+                list[#list + 1] = { id = id, name = name, kind = t.kind, x = right, y = ahead }
+            end
+        end)
+        if not ok then -- skip targets that vanish mid-read
+        end
+    end
+    Coop.ultTargets, Coop.ultList = targets, list
+end
+
+local function startUltimate()
+    if Coop.ultLeft > 0 then return end
+    if not scriptsLoaded() then
+        setResult(false, "Ultimate offline (PeriLink scripts missing)")
+        return
+    end
+    if Coop.ultCdLeft > 0 then
+        setResult(false, string.format("OVERRIDE recharging (%.0fs)", Coop.ultCdLeft))
+        return
+    end
+    local player = Game.GetPlayer()
+    if not player then return end
+    setSlow(3, true, Coop.ultDilation)
+    pcall(function() PeriLinkApi.Hurt(player, Coop.ultHurtPercent, Coop.ultHealthFloor) end)
+    Coop.ultLeft = Coop.ultDuration
+    refreshUltTargets()
+    pushMessage("> OVERRIDE.exe — your mind is mine for " .. math.floor(Coop.ultDuration) .. "s", "system")
+    setResult(true, "OVERRIDE active")
+end
+
+local function stopUltimate()
+    setSlow(3, false)
+    Coop.ultLeft = 0
+    Coop.ultCdLeft = Coop.ultCooldown
+    Coop.ultTargets, Coop.ultList = {}, {}
+    if Coop.focusHeld then setSlow(2, true, Coop.focusDilation) end   -- focus still held
+end
+
+-- Peri picked a radar target
+local function ultHack(id, slot)
+    local t = Coop.ultTargets[id]
+    if Coop.ultLeft <= 0 or not t then
+        setResult(false, "That target is gone")
+        return
+    end
+    if t.kind == "device" or slot == nil then
+        openMenu(nil, nil, t.obj, nil, nil)
+        return
+    end
+    local hackName = Coop.deck[slot + 1] and Coop.deck[slot + 1].name or ("slot " .. (slot + 1))
+    local ok, res = pcall(function()
+        return t.obj:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), true)
+    end)
+    handleHackResult(ok, res, hackName, nil, nil)
 end
 
 -- ---------------------------------------------------------------------------
@@ -439,11 +547,18 @@ local function writeState()
             Coop.menu.seq, jsonString(Coop.menu.name or ""), Coop.menu.x or 0.5, Coop.menu.y or 0.5,
             table.concat(items, ","))
     end
+    local targets = {}
+    for _, t in ipairs(Coop.ultList) do
+        targets[#targets + 1] = string.format('{"id":%s,"name":%s,"kind":%s,"x":%.1f,"y":%.1f}',
+            jsonString(t.id), jsonString(t.name), jsonString(t.kind), t.x, t.y)
+    end
+    local ult = string.format('{"left":%.1f,"cd":%.1f,"duration":%.1f,"cooldown":%.1f,"radius":%d,"targets":[%s]}',
+        Coop.ultLeft, Coop.ultCdLeft, Coop.ultDuration, Coop.ultCooldown, Coop.ultRadius, table.concat(targets, ","))
     local text = string.format(
-        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"deck":[%s],"menu":%s,"results":[%s]}',
+        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"ult":%s,"deck":[%s],"menu":%s,"results":[%s]}',
         tostring(Coop.scriptsOk == true), tostring(Coop.hostCanHack), tostring(Coop.virtualActive),
         Coop.virtualActive and Coop.vram or (Coop.ram[1] or 0), Coop.ram[2] or 0,
-        Coop.focusLeft, Coop.focusMax, tostring(Coop.focusHeld),
+        Coop.focusLeft, Coop.focusMax, tostring(Coop.focusHeld), ult,
         table.concat(parts, ","), menu, table.concat(res, ","))
     if text == lastStateText then return end
     local f = io.open(OUTBOX, "w")
@@ -490,6 +605,14 @@ local function handleCommand(cmd, arg)
         Coop.menu = nil
     elseif cmd == "focus" then
         if arg == "1" then startFocus() else stopFocus() end
+    elseif cmd == "ult" then
+        startUltimate()
+    elseif cmd == "ulthack" then
+        local id, slot = arg:match("^(%S+)%s+(%d+)$")
+        if id then ultHack(id, tonumber(slot)) end
+    elseif cmd == "ultmenu" then
+        local id = arg:match("^(%S+)$")
+        if id then ultHack(id, nil) end
     elseif cmd == "virtual" then
         Coop.virtualEnabled = (arg == "1")
         refreshDeck()
@@ -596,7 +719,11 @@ local function drawVirusWindow()
                 math.floor(Coop.virtualActive and Coop.vram or (Coop.ram[1] or 0)), math.floor(Coop.ram[2] or 0))
         ImGui.PushStyleColor(ImGuiCol.Text, 0.6, 0.6, 0.6, 0.8)
         local focus = Coop.focusHeld and "FOCUS" or string.format("FOCUS %d%%", math.floor(Coop.focusLeft / Coop.focusMax * 100))
-        ImGui.Text(hack .. "   " .. focus)
+        local ult
+        if Coop.ultLeft > 0 then ult = string.format("OVERRIDE %.1fs", Coop.ultLeft)
+        elseif Coop.ultCdLeft > 0 then ult = string.format("ULT %ds", math.ceil(Coop.ultCdLeft))
+        else ult = "ULT ready" end
+        ImGui.Text(hack .. "   " .. focus .. "   " .. ult)
         ImGui.PopStyleColor(1)
         if hasIcon then ImGui.EndGroup() end
 
@@ -686,6 +813,23 @@ registerForEvent("onUpdate", function(dt)
         Coop.focusLeft = math.min(Coop.focusMax, Coop.focusLeft + Coop.focusRecharge * dt)
     end
 
+    -- Ultimate: count down, keep the radar fresh, and keep the slow-down applied
+    if Coop.ultLeft > 0 then
+        Coop.ultLeft = Coop.ultLeft - dt
+        ultTimer = ultTimer + dt
+        if Coop.ultLeft <= 0 then
+            stopUltimate()
+            writeState()
+        elseif ultTimer >= 0.25 then
+            ultTimer = 0
+            refreshUltTargets()
+            setSlow(3, true, Coop.ultDilation)
+            writeState()
+        end
+    elseif Coop.ultCdLeft > 0 then
+        Coop.ultCdLeft = math.max(0, Coop.ultCdLeft - dt)
+    end
+
     -- Share his deck/RAM with the app, and keep the hacking lock applied
     -- (it resets when a save is loaded)
     stateTimer = stateTimer + dt
@@ -716,4 +860,5 @@ end)
 
 registerForEvent("onShutdown", function()
     setSlow(2, false)
+    setSlow(3, false)
 end)

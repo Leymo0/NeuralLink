@@ -19,6 +19,7 @@ const Guest = (() => {
     ...Array.from({ length: MAX_SLOTS }, (_, i) => [`slot${i + 1}`, `Hack slot ${i + 1}`]),
     ['focus', 'Focus (hold)'],
     ['ping', 'Ping'],
+    ['ult', 'Ultimate (Override)'],
     ['chat', 'Talk'],
     ['fullscreen', 'Fullscreen'],
   ];
@@ -247,6 +248,76 @@ const Guest = (() => {
     document.querySelector('.focus-meter').classList.toggle('active', !!f[2]);
   }
 
+  // ---------- ULTIMATE: OVERRIDE radar ----------
+
+  let hoverId = null;
+  const ultActive = () => (state?.ult?.left || 0) > 0;
+
+  function renderUlt() {
+    const u = state?.ult;
+    const slot = $('ult-slot');
+    if (u) {
+      slot.classList.toggle('active', u.left > 0);
+      slot.classList.toggle('ready', u.left <= 0 && u.cd <= 0);
+      $('ult-text').textContent = u.left > 0 ? `Override ${u.left.toFixed(1)}s`
+        : u.cd > 0 ? `Override ${Math.ceil(u.cd)}s` : 'Override';
+    }
+    const radar = $('radar');
+    if (!u || u.left <= 0) {
+      if (!radar.hidden) { radar.hidden = true; hoverId = null; }
+      return;
+    }
+    radar.hidden = false;
+    $('stage-console').classList.remove('faded');
+    $('radar-time').textContent = `${u.left.toFixed(1)}s`;
+    $('radar-fill').style.width = `${Math.max(0, (u.left / (u.duration || 6)) * 100)}%`;
+
+    const field = $('radar-field');
+    const size = field.clientWidth;
+    const dots = $('radar-dots');
+    dots.innerHTML = '';
+    for (const t of u.targets || []) {
+      // x = meters to V's right, y = meters ahead; V faces up
+      const r = Math.min(1, Math.hypot(t.x, t.y) / (u.radius || 40)) * 0.5;
+      const ang = Math.atan2(t.x, t.y);
+      const px = size / 2 + Math.sin(ang) * r * size;
+      const py = size / 2 - Math.cos(ang) * r * size;
+      const el = document.createElement('div');
+      el.className = 'radar-dot ' + t.kind + (t.id === hoverId ? ' hover' : '');
+      el.dataset.id = t.id;
+      el.style.left = `${px}px`;
+      el.style.top = `${py}px`;
+      el.innerHTML = '<i></i><span></span>';
+      el.querySelector('span').textContent = t.name;
+      dots.appendChild(el);
+    }
+    updateHover();
+  }
+
+  // The radar target nearest the mouse (within 60 px) is the one you hack
+  function updateHover() {
+    if (!ultActive()) return;
+    let best = null, bestD = 60;
+    for (const el of $('radar-dots').children) {
+      const b = el.querySelector('i').getBoundingClientRect();
+      const d = Math.hypot(mouse.x - (b.left + b.width / 2), mouse.y - (b.top + b.height / 2));
+      if (d < bestD) { bestD = d; best = el.dataset.id; }
+    }
+    if (best !== hoverId) {
+      hoverId = best;
+      for (const el of $('radar-dots').children) el.classList.toggle('hover', el.dataset.id === hoverId);
+    }
+  }
+
+  function ultHack(slot) {
+    if (!hoverId) return toast('Hover a target on the map first');
+    const deck = state?.deck || [];
+    if (slot >= deck.length) return toast(`Slot ${slot + 1} is empty`);
+    send({ cmd: 'ulthack', id: hoverId, slot });
+    const t = (state?.ult?.targets || []).find((x) => x.id === hoverId);
+    toast(`${deck[slot].name} → ${t ? t.name : 'target'}`, true);
+  }
+
   // ---------- hack menu (the game's own list for an NPC or device) ----------
 
   let menuSeqShown = 0;
@@ -284,11 +355,11 @@ const Guest = (() => {
     });
     if (!list.children.length) list.innerHTML = '<li class="locked"><span class="name">No hacks available</span></li>';
 
-    // Place it next to the target, kept inside the window
+    // Place it next to the target (or the mouse on the radar), kept inside the window
     const r = videoRect();
     box.hidden = false;
-    const x = r.x + (menu.x ?? 0.5) * r.w + 24;
-    const y = r.y + (menu.y ?? 0.5) * r.h - 20;
+    const x = ultActive() ? mouse.x + 24 : r.x + (menu.x ?? 0.5) * r.w + 24;
+    const y = ultActive() ? mouse.y - 20 : r.y + (menu.y ?? 0.5) * r.h - 20;
     box.style.left = `${Math.max(8, Math.min(x, innerWidth - box.offsetWidth - 8))}px`;
     box.style.top = `${Math.max(8, Math.min(y, innerHeight - box.offsetHeight - 90))}px`;
   }
@@ -321,6 +392,7 @@ const Guest = (() => {
     state = next;
     renderHackBar();
     renderFocus();
+    renderUlt();
     renderMenu();
 
     // Results of hacks (newest last). Show only ones we haven't seen.
@@ -417,7 +489,7 @@ const Guest = (() => {
   function wakeConsole() {
     $('stage-console').classList.remove('faded');
     clearTimeout(fadeTimer);
-    fadeTimer = setTimeout(() => $('stage-console').classList.add('faded'), 3500);
+    fadeTimer = setTimeout(() => { if (!ultActive()) $('stage-console').classList.add('faded'); }, 3500);
   }
 
   // ---------- public ----------
@@ -483,11 +555,17 @@ const Guest = (() => {
       $('reticle').style.left = e.clientX + 'px';
       $('reticle').style.top = e.clientY + 'px';
       wakeConsole();
+      updateHover();
     });
 
     overlay.addEventListener('mousedown', (e) => {
       if (chatOpen() || e.target.closest('#stage-console, #stage-lost, #chat, #hack-menu')) return;
       if (menuOpen()) { closeMenu(); return; }      // click away closes the menu
+      if (ultActive()) {                            // the radar takes the clicks
+        if (e.button === 0) ultHack(selected);
+        if (e.button === 2 && hoverId) send({ cmd: 'ultmenu', id: hoverId });
+        return;
+      }
       if (e.button === 0) castAt(selected, e.clientX, e.clientY);
       if (e.button === 2) scanAt(e.clientX, e.clientY);     // right-click: scan / hack menu
       if (e.button === 1) { e.preventDefault(); pingAt(e.clientX, e.clientY); }   // middle-click: ping
@@ -508,6 +586,12 @@ const Guest = (() => {
         if (e.key === 'Escape')   { e.preventDefault(); closeMenu(); return; }
       }
 
+      if (is('ult')) { e.preventDefault(); if (!e.repeat && send({ cmd: 'ult' })) toast('OVERRIDE', true); return; }
+      if (ultActive()) {
+        for (let i = 0; i < MAX_SLOTS; i++) {
+          if (kb[`slot${i + 1}`] && is(`slot${i + 1}`)) { e.preventDefault(); select(i); ultHack(i); return; }
+        }
+      }
       if (is('focus')) {
         e.preventDefault();
         // Space would otherwise "click" the last clicked button (e.g. Unplug)

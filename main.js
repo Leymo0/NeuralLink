@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS = {
     slot5: '5', slot6: '6', slot7: '7', slot8: '8',
     focus: ' ',       // Space (hold): slow everything while aiming a hack
     ping: 'q',        // "look here" marker (also middle mouse button)
+    ult: 'f',         // ULTIMATE: OVERRIDE
     chat: 'Enter',
     fullscreen: 'F11',
   },
@@ -265,6 +266,17 @@ ipcMain.handle('game:command', (_e, c) => {
     }
     case 'lock':  return writeToGame('lock', c.allowed ? '1' : '0');
     case 'virtual': return writeToGame('virtual', c.on ? '1' : '0');
+    case 'ult':   return writeToGame('ult');
+    case 'ulthack': {
+      const id = String(c.id || ''), slot = Number(c.slot);
+      if (!/^[\w-]{1,40}$/.test(id) || !Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return false;
+      return writeToGame('ulthack', `${id} ${slot}`);
+    }
+    case 'ultmenu': {
+      const id = String(c.id || '');
+      if (!/^[\w-]{1,40}$/.test(id)) return false;
+      return writeToGame('ultmenu', id);
+    }
     case 'menu':  return pt ? writeToGame('menu', pt) : false;
     case 'menuclose': return writeToGame('menuclose');
     case 'focus': return writeToGame('focus', c.on ? '1' : '0');

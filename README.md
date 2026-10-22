@@ -33,6 +33,21 @@ Peri uses **his** cyberdeck through the game's own quickhack code:
 
 ---
 
+## Ultimate: OVERRIDE (F)
+
+For **6 seconds** time slows to 10% and a **radar map** replaces Peri's view: V in the middle (facing up)
+and every hackable thing within 40 m around him — people, civilians, cameras, turrets — even behind him
+or behind walls.
+
+- Hover a name → **1–8** uploads that quickhack, **left-click** the selected one, **right-click** opens
+  the full hack menu (devices always open their menu).
+- Hacks cost **no RAM** while it lasts.
+- Costs V **10% of his health**, but never takes him below 10% — it can't kill him.
+- **60 s cooldown** (shown on Peri's bar and in his HUD).
+
+Tuning: `ultDuration`, `ultCooldown`, `ultRadius`, `ultHurtPercent`, `ultHealthFloor` at the top of
+`mod/CoopOperator/init.lua`.
+
 ## Experimental: Peri's own cyberdeck
 
 Tick **EXPERIMENTAL — Peri brings her own cyberdeck** on the Host screen. Then, whenever he is
@@ -103,6 +118,7 @@ Never reinstall — just click:
 | **Right-click** | Scan: open the game's hack menu for whatever is under the mouse (NPC or device). Pick with **1–9** or click; **Esc** closes |
 | **Hold Space** | Focus: time nearly stops while you aim. Drains a 6-second meter that refills when you let go |
 | **Q** / middle-click | Ping: "LOOK" marker on his screen |
+| **F** | **ULTIMATE: OVERRIDE** — see below |
 | **Enter** | Type a message → appears top-right in his HUD |
 | **Tab** (while typing) | Switch icon for this message (or click an icon in the chat box) |
 | **F11** | Fullscreen |
