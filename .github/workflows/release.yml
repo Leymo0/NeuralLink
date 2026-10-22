@@ -62,7 +62,14 @@ jobs:
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $files = @(Get-ChildItem dist -File | Where-Object { $_.Name -match '\.(exe|blockmap)$' -or $_.Name -eq 'latest.yml' } | ForEach-Object { $_.FullName })
           Write-Host "Publishing v$version with: $($files -join ', ')"
-          $out = gh release create "v$version" @files --title "NeuralLink $version" --notes-file build/release-notes.md --target $env:GITHUB_SHA 2>&1
+          gh release view "v$version" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # Release already exists (e.g. a re-run): replace its files and notes
+            $out = gh release upload "v$version" @files --clobber 2>&1
+            if ($LASTEXITCODE -eq 0) { $out += gh release edit "v$version" --notes-file build/release-notes.md --title "NeuralLink $version" 2>&1 }
+          } else {
+            $out = gh release create "v$version" @files --title "NeuralLink $version" --notes-file build/release-notes.md --target $env:GITHUB_SHA 2>&1
+          }
           if ($LASTEXITCODE -ne 0) {
             Write-Output "::error title=Publish failed::$($out -join ' || ')"
             exit 1
