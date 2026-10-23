@@ -48,6 +48,8 @@ const STREAM_PRESETS = {
   '1080p30': { w: 1920, h: 1080, fps: 30, mbps: 6,  label: '1080p · 30 fps' },
   '720p60':  { w: 1280, h: 720,  fps: 60, mbps: 5,  label: '720p · 60 fps' },
 };
+// Legacy = exactly how 0.6.4 streamed: full screen size, default codec, no speed hints
+STREAM_PRESETS.legacy = { legacy: true, fps: 60, mbps: 8, label: 'Legacy (0.6.4 behaviour)' };
 const streamPreset = (key) => STREAM_PRESETS[key] || STREAM_PRESETS['1080p60'];
 
 // Put H.264 first in the video codec list: on Windows it's usually compressed by the

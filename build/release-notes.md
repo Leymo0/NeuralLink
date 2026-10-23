@@ -1,6 +1,6 @@
 **NeuralLink 0.6.5** — smoother, steadier stream
 
-- **Stream quality** setting on the Host screen: **1080p 60** (default), **1080p 30**, or **720p 60**. The picture is capped at that size instead of sending the host's full screen resolution (1440p / ultrawide / 4K), which is much lighter to compress.
+- **Stream quality** setting on the Host screen: **1080p 60** (default), **1080p 30**, or **720p 60** — or **Legacy**, which streams exactly like 0.6.4 if that already worked well for you. The new presets cap the picture is capped at that size instead of sending the host's full screen resolution (1440p / ultrawide / 4K), which is much lighter to compress.
 - **H.264 video** — usually compressed by the graphics card on Windows, leaving the CPU for Cyberpunk (before: VP8 on the CPU).
 - **Starts sharp**: the connection now starts at a sensible speed instead of showing a blurry picture for the first 10–20 seconds, and doesn't collapse to potato quality on a small hiccup.
 - **Smooth playback** for Peri: a tiny ~150 ms buffer that hides a shaky connection (Join screen; untick for lowest delay).

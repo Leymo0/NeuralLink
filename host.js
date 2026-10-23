@@ -86,10 +86,9 @@ const Host = (() => {
   async function capture() {
     const q = streamPreset(settings.streamQuality);
     const s = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        width: { max: q.w }, height: { max: q.h },
-        frameRate: { ideal: q.fps, max: q.fps },
-      },
+      video: q.legacy
+        ? { frameRate: { ideal: q.fps, max: q.fps } }
+        : { width: { max: q.w }, height: { max: q.h }, frameRate: { ideal: q.fps, max: q.fps } },
       // Game sound: no voice-call filters (they squash music and explosions), full stereo
       audio: settings.shareAudio ? {
         echoCancellation: false,
@@ -102,7 +101,7 @@ const Host = (() => {
     const video = s.getVideoTracks()[0];
     if (video) {
       video.contentHint = 'motion';             // favor smooth motion over sharp text
-      video.applyConstraints({ width: { max: q.w }, height: { max: q.h }, frameRate: { max: q.fps } }).catch(() => {});
+      if (!q.legacy) video.applyConstraints({ width: { max: q.w }, height: { max: q.h }, frameRate: { max: q.fps } }).catch(() => {});
     }
     const audio = s.getAudioTracks()[0];
     if (audio) {
@@ -125,9 +124,12 @@ const Host = (() => {
           p.encodings[0].maxBitrate = q.mbps * 1_000_000;
           p.encodings[0].maxFramerate = q.fps;
           // If the capture is still bigger than the preset (some setups ignore the cap), scale it down
-          const src = sender.track.getSettings();
-          const scale = Math.max(1, (src.width || q.w) / q.w, (src.height || q.h) / q.h);
-          p.encodings[0].scaleResolutionDownBy = scale;
+          if (q.legacy) {
+            delete p.encodings[0].scaleResolutionDownBy;
+          } else {
+            const src = sender.track.getSettings();
+            p.encodings[0].scaleResolutionDownBy = Math.max(1, (src.width || q.w) / q.w, (src.height || q.h) / q.h);
+          }
           p.degradationPreference = 'maintain-framerate';   // stable motion first, sharpness second
           await sender.setParameters(p);
           // and a high audio bitrate for the game sound
@@ -161,7 +163,9 @@ const Host = (() => {
   async function applyQuality() {
     const q = streamPreset(settings.streamQuality);
     const video = stream?.getVideoTracks()[0];
-    if (video) await video.applyConstraints({ width: { max: q.w }, height: { max: q.h }, frameRate: { max: q.fps } }).catch(() => {});
+    if (video) await video.applyConstraints(q.legacy
+      ? { frameRate: { max: q.fps } }
+      : { width: { max: q.w }, height: { max: q.h }, frameRate: { max: q.fps } }).catch(() => {});
     if (call) tuneQuality(call);
   }
 
@@ -193,7 +197,9 @@ const Host = (() => {
       conn.on('open', () => {
         setStatus('Peri jacked in', 'live');
         log('act', 'Peri connected');
-        call = peer.call(conn.peer, stream, { sdpTransform: streamSdp });
+        // Codec / speed hints are part of the handshake, so switching to or from Legacy applies on the next connect
+        const legacy = !!streamPreset(settings.streamQuality).legacy;
+        call = peer.call(conn.peer, stream, { sdpTransform: legacy ? hiFiAudioSdp : streamSdp, metadata: { legacy } });
         tuneQuality(call);
         if (lastState) conn.send({ type: 'state', state: lastState });
       });
@@ -453,7 +459,8 @@ const Host = (() => {
     $('stream-quality').addEventListener('change', async (e) => {
       settings = await window.neural.saveSettings({ streamQuality: e.target.value });
       applyQuality();
-      log('act', `Stream quality: ${streamPreset(e.target.value).label}`);
+      log('act', `Stream quality: ${streamPreset(e.target.value).label}` +
+        (call ? ' — switching to/from Legacy takes effect when Peri reconnects' : ''));
     });
     $('share-audio').addEventListener('change', async (e) => {
       settings = await window.neural.saveSettings({ shareAudio: e.target.checked });

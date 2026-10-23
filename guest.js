@@ -122,7 +122,8 @@ const Guest = (() => {
 
     // The host calls us with his screen once the data link is open
     peer.on('call', (call) => {
-      call.answer(undefined, { sdpTransform: streamSdp });
+      legacyStream = !!call.metadata?.legacy;
+      call.answer(undefined, { sdpTransform: legacyStream ? hiFiAudioSdp : streamSdp });
       currentCall = call;
       call.on('stream', (stream) => {
         clearTimeout(connectTimeout);
@@ -177,8 +178,9 @@ const Guest = (() => {
   let currentCall = null, statsTimer = null, lastStats = null;
 
   // A small buffer (≈150 ms) smooths over a shaky connection; "lowest delay" turns it off
+  let legacyStream = false;   // host picked Legacy: no buffer, like 0.6.4
   function applySmoothing() {
-    const target = settings?.smoothPlayback === false ? 0 : 150;
+    const target = (legacyStream || settings?.smoothPlayback === false) ? 0 : 150;
     for (const r of currentCall?.peerConnection?.getReceivers() || []) {
       try { r.jitterBufferTarget = target; } catch { /* older engines */ }
       try { r.playoutDelayHint = target / 1000; } catch { /* older engines */ }
