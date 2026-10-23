@@ -345,6 +345,13 @@ function createWindow() {
 
 // Only one NeuralLink at a time. Opening it again brings the existing window forward
 // (or recreates it if a background copy lost its window).
+// The app's windows only ever show NeuralLink's own pages: no navigating away, no pop-ups
+app.on('web-contents-created', (_e, contents) => {
+  contents.on('will-navigate', (e) => e.preventDefault());
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-attach-webview', (e) => e.preventDefault());
+});
+
 const isSelfTest = !!process.env.NEURALLINK_SELFTEST_GAME || !!process.env.NEURALLINK_TEST;
 const gotLock = isSelfTest || app.requestSingleInstanceLock();
 if (!gotLock) {
