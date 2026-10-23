@@ -76,6 +76,13 @@
       <p class="muted small-text">Started Cyberpunk after opening this? It shows up within a few seconds. Sharing the whole screen works too.</p>
       <div id="sources" class="sources"></div>
       <label class="check">Peri's OVERRIDE voice volume <input type="range" id="voice-volume" min="0" max="1" step="0.05"> <button id="voice-test" class="small">▶ Test</button></label>
+      <label class="check">Stream quality
+        <select id="stream-quality">
+          <option value="1080p60">1080p · 60 fps (best)</option>
+          <option value="1080p30">1080p · 30 fps (steadier)</option>
+          <option value="720p60">720p · 60 fps (lightest)</option>
+        </select>
+      </label>
       <label class="check"><input type="checkbox" id="share-audio"> Share game sound (also shares other PC sounds, like Discord voice)</label>
     </div>
 
@@ -91,6 +98,7 @@
         <button id="stop-host" class="small danger">Close room</button>
       </div>
       <video id="host-preview" muted autoplay playsinline></video>
+      <div id="host-stats" class="stream-stats">Waiting for Peri…</div>
     </div>
 
     <div class="panel log-panel">
@@ -134,6 +142,7 @@
     </div>
 
     <div class="panel">
+      <label class="check"><input type="checkbox" id="smooth-playback"> Smooth playback (tiny buffer, steadier on a shaky connection)</label>
       <h2>Your keybinds</h2>
       <p class="muted small-text">Click a key to change it. Left-click casts the selected hack, right-click scans, middle-click pings.</p>
       <div id="keybinds" class="keybinds"></div>

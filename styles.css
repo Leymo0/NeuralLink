@@ -325,3 +325,8 @@ button { font: inherit; cursor: pointer; }
 .tag.device i { background: rgba(92, 242, 230, 0.7); }
 .tag.hover span { color: #160206; background: var(--yellow); border-color: var(--yellow); box-shadow: 0 0 14px rgba(247, 225, 76, 0.6); }
 .tag.hover i { background: var(--yellow); }
+
+/* stream quality + stats */
+.stream-stats { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+#stream-quality { margin-left: 8px; background: #0b060b; color: var(--ink); border: 1px solid var(--line); padding: 3px 6px; font: inherit; }
+#stage-latency { max-width: 60vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

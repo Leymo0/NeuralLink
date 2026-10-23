@@ -41,6 +41,100 @@ function hiFiAudioSdp(sdp) {
   return sdp.replace(m[0], `${m[0]}\r\na=fmtp:${pt} ` + Object.entries(wanted).map(([k, v]) => `${k}=${v}`).join(';'));
 }
 
+// Stream quality presets (host picks one). Resolution is capped so the encoder isn't
+// compressing a full 1440p/4K/ultrawide screen every frame.
+const STREAM_PRESETS = {
+  '1080p60': { w: 1920, h: 1080, fps: 60, mbps: 10, label: '1080p · 60 fps' },
+  '1080p30': { w: 1920, h: 1080, fps: 30, mbps: 6,  label: '1080p · 30 fps' },
+  '720p60':  { w: 1280, h: 720,  fps: 60, mbps: 5,  label: '720p · 60 fps' },
+};
+const streamPreset = (key) => STREAM_PRESETS[key] || STREAM_PRESETS['1080p60'];
+
+// Put H.264 first in the video codec list: on Windows it's usually compressed by the
+// graphics card, leaving the CPU free for the game (VP8, the default, uses the CPU).
+function preferH264(sdp) {
+  const lines = sdp.split('\r\n');
+  const mIndex = lines.findIndex((l) => l.startsWith('m=video '));
+  if (mIndex < 0) return sdp;
+  const parts = lines[mIndex].split(' ');
+  const header = parts.slice(0, 3), pts = parts.slice(3);
+  const rtpmap = {}, fmtp = {}, apt = {};
+  for (const l of lines) {
+    let m = l.match(/^a=rtpmap:(\d+) ([^/]+)\//);
+    if (m) rtpmap[m[1]] = m[2].toUpperCase();
+    m = l.match(/^a=fmtp:(\d+) (.*)$/);
+    if (m) { fmtp[m[1]] = m[2]; const a = m[2].match(/apt=(\d+)/); if (a) apt[m[1]] = a[1]; }
+  }
+  const h264 = pts.filter((pt) => rtpmap[pt] === 'H264' && /packetization-mode=1/.test(fmtp[pt] || ''));
+  if (!h264.length) return sdp;
+  // high/main profiles before baseline, each followed by its retransmission (rtx) payload
+  h264.sort((a, b) => (/profile-level-id=4d/.test(fmtp[b] || '') - /profile-level-id=4d/.test(fmtp[a] || '')));
+  const first = [];
+  for (const pt of h264) {
+    first.push(pt);
+    for (const [rtx, of] of Object.entries(apt)) if (of === pt && pts.includes(rtx)) first.push(rtx);
+  }
+  lines[mIndex] = [...header, ...first, ...pts.filter((pt) => !first.includes(pt))].join(' ');
+  return lines.join('\r\n');
+}
+
+// Start the connection at a sensible speed instead of WebRTC's very cautious default
+// (which shows 270p for the first ~10-20 s), and never let it collapse below ~1.5 Mbps.
+// It still adapts upward/downward with the real connection.
+function videoBitrateHints(sdp, startKbps = 4000, minKbps = 1500, maxKbps = 12000) {
+  const lines = sdp.split('\r\n');
+  const m = lines.findIndex((l) => l.startsWith('m=video '));
+  if (m < 0) return sdp;
+  const pts = lines[m].split(' ').slice(3);
+  const hint = `x-google-start-bitrate=${startKbps};x-google-min-bitrate=${minKbps};x-google-max-bitrate=${maxKbps}`;
+  for (let i = 0; i < lines.length; i++) {
+    const f = lines[i].match(/^a=fmtp:(\d+) (.*)$/);
+    if (f && pts.includes(f[1]) && !/apt=/.test(f[2]) && !/x-google-start-bitrate/.test(f[2])) {
+      lines[i] = `${lines[i]};${hint}`;
+    }
+  }
+  return lines.join('\r\n');
+}
+
+const streamSdp = (sdp) => videoBitrateHints(preferH264(hiFiAudioSdp(sdp)));
+
+// Live numbers for the stats line. kind: 'outbound' (host) or 'inbound' (Peri).
+async function readStreamStats(pc, kind, prev) {
+  if (!pc) return null;
+  const report = await pc.getStats();
+  const out = { t: performance.now() };
+  let codecId = null;
+  report.forEach((s) => {
+    if (s.type === `${kind}-rtp` && s.kind === 'video') {
+      out.w = s.frameWidth; out.h = s.frameHeight; out.fps = s.framesPerSecond;
+      out.bytes = kind === 'outbound' ? s.bytesSent : s.bytesReceived;
+      out.limit = s.qualityLimitationReason;        // host only: 'cpu' | 'bandwidth' | 'none'
+      out.lost = s.packetsLost; out.freezes = s.freezeCount;
+      codecId = s.codecId;
+    }
+    if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded' && s.currentRoundTripTime != null) {
+      out.rtt = Math.round(s.currentRoundTripTime * 1000);
+    }
+  });
+  if (codecId && report.get(codecId)) out.codec = report.get(codecId).mimeType.replace('video/', '');
+  if (prev && prev.bytes != null && out.bytes != null) {
+    out.mbps = ((out.bytes - prev.bytes) * 8) / ((out.t - prev.t) * 1000);
+  }
+  return out;
+}
+
+function describeStats(s, side) {
+  if (!s || !s.w) return side === 'host' ? 'Waiting for Peri…' : 'Connecting…';
+  const parts = [`${s.w}×${s.h}`, `${Math.round(s.fps || 0)} fps`];
+  if (s.codec) parts.push(s.codec);
+  if (s.mbps != null) parts.push(`${s.mbps.toFixed(1)} Mbps`);
+  if (s.rtt != null) parts.push(`${s.rtt} ms`);
+  if (side === 'host' && s.limit && s.limit !== 'none') {
+    parts.push(s.limit === 'cpu' ? '⚠ held back by this PC (try 1080p 30 or 720p)' : '⚠ held back by the internet');
+  }
+  return parts.join(' · ');
+}
+
 function showView(name) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
 }

@@ -122,9 +122,12 @@ const Guest = (() => {
 
     // The host calls us with his screen once the data link is open
     peer.on('call', (call) => {
-      call.answer(undefined, { sdpTransform: hiFiAudioSdp });
+      call.answer(undefined, { sdpTransform: streamSdp });
+      currentCall = call;
       call.on('stream', (stream) => {
         clearTimeout(connectTimeout);
+        applySmoothing();
+        watchStats();
         const video = $('stage-video');
         video.srcObject = stream;
         video.volume = Number($('volume').value);
@@ -153,7 +156,7 @@ const Guest = (() => {
   function onData(msg) {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'busy') { joinError('Someone else is already the Operator in this room.'); cleanup(); }
-    if (msg.type === 'hb') $('stage-latency').textContent = `${Date.now() - msg.t} ms`;
+    // (round-trip time now comes from the stream stats)
     if (msg.type === 'ack' && !msg.ok) toast('Host’s game didn’t get it — is the mod installed?');
     if (msg.type === 'state') onState(msg.state);
   }
@@ -169,7 +172,32 @@ const Guest = (() => {
     closeChat();
   }
 
+  // ---------- smooth playback + stream stats ----------
+
+  let currentCall = null, statsTimer = null, lastStats = null;
+
+  // A small buffer (≈150 ms) smooths over a shaky connection; "lowest delay" turns it off
+  function applySmoothing() {
+    const target = settings?.smoothPlayback === false ? 0 : 150;
+    for (const r of currentCall?.peerConnection?.getReceivers() || []) {
+      try { r.jitterBufferTarget = target; } catch { /* older engines */ }
+      try { r.playoutDelayHint = target / 1000; } catch { /* older engines */ }
+    }
+  }
+
+  function watchStats() {
+    clearInterval(statsTimer);
+    lastStats = null;
+    statsTimer = setInterval(async () => {
+      const s = await readStreamStats(currentCall?.peerConnection, 'inbound', lastStats).catch(() => null);
+      if (s) lastStats = s;
+      $('stage-latency').textContent = describeStats(s, 'peri');
+    }, 2000);
+  }
+
   function cleanup() {
+    clearInterval(statsTimer);
+    currentCall = null;
     focusing = false;
     hoverTag = null;
     $('tags').innerHTML = '';
@@ -585,6 +613,7 @@ const Guest = (() => {
     }
     renderKeybinds();
     renderProfile();
+    $('smooth-playback').checked = settings.smoothPlayback !== false;
     $('join-error').textContent = '';
     $('join-btn').disabled = false;
     $('join-code').focus();
@@ -601,6 +630,10 @@ const Guest = (() => {
   document.addEventListener('DOMContentLoaded', () => {
     $('join-btn').addEventListener('click', connect);
     $('op-name').addEventListener('input', onNameInput);
+    $('smooth-playback').addEventListener('change', async (e) => {
+      settings = await window.neural.saveSettings({ smoothPlayback: e.target.checked });
+      applySmoothing();
+    });
     document.querySelectorAll('.icon-choice').forEach((b) => b.addEventListener('click', () => pickIcon(b.dataset.icon)));
     $('join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
     $('join-code').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });

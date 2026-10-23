@@ -84,8 +84,12 @@ const Host = (() => {
   // ---------- streaming ----------
 
   async function capture() {
+    const q = streamPreset(settings.streamQuality);
     const s = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: settings.frameRate, max: settings.frameRate } },
+      video: {
+        width: { max: q.w }, height: { max: q.h },
+        frameRate: { ideal: q.fps, max: q.fps },
+      },
       // Game sound: no voice-call filters (they squash music and explosions), full stereo
       audio: settings.shareAudio ? {
         echoCancellation: false,
@@ -96,7 +100,10 @@ const Host = (() => {
       } : false,
     });
     const video = s.getVideoTracks()[0];
-    if (video) video.contentHint = 'motion';   // favor smooth motion over sharp text
+    if (video) {
+      video.contentHint = 'motion';             // favor smooth motion over sharp text
+      video.applyConstraints({ width: { max: q.w }, height: { max: q.h }, frameRate: { max: q.fps } }).catch(() => {});
+    }
     const audio = s.getAudioTracks()[0];
     if (audio) {
       audio.contentHint = 'music';             // tells the encoder this isn't speech
@@ -112,11 +119,16 @@ const Host = (() => {
       const sender = pc?.getSenders().find((s) => s.track && s.track.kind === 'video');
       if (sender) {
         try {
+          const q = streamPreset(settings.streamQuality);
           const p = sender.getParameters();
           if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-          p.encodings[0].maxBitrate = settings.maxBitrateMbps * 1_000_000;
-          p.encodings[0].maxFramerate = settings.frameRate;
-          p.degradationPreference = 'maintain-framerate';
+          p.encodings[0].maxBitrate = q.mbps * 1_000_000;
+          p.encodings[0].maxFramerate = q.fps;
+          // If the capture is still bigger than the preset (some setups ignore the cap), scale it down
+          const src = sender.track.getSettings();
+          const scale = Math.max(1, (src.width || q.w) / q.w, (src.height || q.h) / q.h);
+          p.encodings[0].scaleResolutionDownBy = scale;
+          p.degradationPreference = 'maintain-framerate';   // stable motion first, sharpness second
           await sender.setParameters(p);
           // and a high audio bitrate for the game sound
           const audioSender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
@@ -132,6 +144,25 @@ const Host = (() => {
       }
       await sleep(500);
     }
+  }
+
+  // Live stream stats under the preview (and the reason if it's struggling)
+  let statsTimer = null, lastStats = null;
+  function watchStats() {
+    clearInterval(statsTimer);
+    lastStats = null;
+    statsTimer = setInterval(async () => {
+      const s = await readStreamStats(call?.peerConnection, 'outbound', lastStats).catch(() => null);
+      if (s) lastStats = s;
+      $('host-stats').textContent = call ? describeStats(s, 'host') : 'Waiting for Peri…';
+    }, 2000);
+  }
+
+  async function applyQuality() {
+    const q = streamPreset(settings.streamQuality);
+    const video = stream?.getVideoTracks()[0];
+    if (video) await video.applyConstraints({ width: { max: q.w }, height: { max: q.h }, frameRate: { max: q.fps } }).catch(() => {});
+    if (call) tuneQuality(call);
   }
 
   function openRoom() {
@@ -162,7 +193,7 @@ const Host = (() => {
       conn.on('open', () => {
         setStatus('Peri jacked in', 'live');
         log('act', 'Peri connected');
-        call = peer.call(conn.peer, stream, { sdpTransform: hiFiAudioSdp });
+        call = peer.call(conn.peer, stream, { sdpTransform: streamSdp });
         tuneQuality(call);
         if (lastState) conn.send({ type: 'state', state: lastState });
       });
@@ -330,6 +361,7 @@ const Host = (() => {
   async function enter() {
     settings = await window.neural.getSettings();
     $('share-audio').checked = settings.shareAudio;
+    $('stream-quality').value = settings.streamQuality || '1080p60';
     $('only-peri').checked = !settings.hostCanHack;
     $('voice-volume').value = settings.voiceVolume ?? 1;
     $('virtual-deck').checked = !!settings.virtualDeck;
@@ -356,11 +388,13 @@ const Host = (() => {
     applyVirtual();
     clearInterval(stateTimer);
     stateTimer = setInterval(pollState, 400);
+    watchStats();
     openRoom();
     $('start-host').disabled = false;
   }
 
   function stop() {
+    clearInterval(statsTimer);
     if (call) call.close();
     if (guest) guest.close();
     if (peer) peer.destroy();
@@ -415,6 +449,11 @@ const Host = (() => {
       settings = await window.neural.saveSettings({ hostCanHack: !e.target.checked });
       applyLock();
       log('act', e.target.checked ? 'Only Peri can hack' : 'Host can hack too');
+    });
+    $('stream-quality').addEventListener('change', async (e) => {
+      settings = await window.neural.saveSettings({ streamQuality: e.target.value });
+      applyQuality();
+      log('act', `Stream quality: ${streamPreset(e.target.value).label}`);
     });
     $('share-audio').addEventListener('change', async (e) => {
       settings = await window.neural.saveSettings({ shareAudio: e.target.checked });
