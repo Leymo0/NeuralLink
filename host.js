@@ -13,6 +13,7 @@ const Host = (() => {
   let lastStateJson = '';
   let lastState = null;  // his deck + RAM, as reported by the mod
   let lastHeartbeat = 0;
+  let sealed = false;   // off the lobby server while Peri is connected: nobody else can reach the room
   let lastAimAt = 0;
 
   // ---------- UI helpers ----------
@@ -171,13 +172,14 @@ const Host = (() => {
 
   function openRoom() {
     roomCode = randomCode();
-    peer = new Peer(ROOM_PREFIX + roomCode, { config: iceConfig(settings) });
+    peer = new Peer(ROOM_PREFIX + roomCode, { config: iceConfig(settings), ...(settings.peerServer || {}) });
 
     peer.on('open', () => {
-      $('room-code').textContent = roomCode;
+      showCode(false);
       $('room-idle').hidden = true;
       $('room-live').hidden = false;
-      setStatus('Waiting for Peri…', 'warn');
+      if (sealed) { peer.disconnect(); return; }
+      if (!guest?.open) setStatus('Waiting for Peri…', 'warn');
     });
 
     peer.on('connection', (conn) => {
@@ -199,22 +201,30 @@ const Host = (() => {
         log('act', 'Peri connected');
         // Codec / speed hints are part of the handshake, so switching to or from Legacy applies on the next connect
         const legacy = !!streamPreset(settings.streamQuality).legacy;
-        call = peer.call(conn.peer, stream, { sdpTransform: legacy ? hiFiAudioSdp : streamSdp, metadata: { legacy } });
+        // The video handshake goes over this direct link, not the lobby server…
+        call = MediaLink.call(conn, stream, { sdpTransform: legacy ? hiFiAudioSdp : streamSdp, metadata: { legacy }, config: iceConfig(settings) });
         tuneQuality(call);
         if (lastState) conn.send({ type: 'state', state: lastState });
+        // …so the room can drop off the lobby server: it's 1-on-1, nobody else needs to find it
+        seal();
       });
-      conn.on('data', (msg) => { if (conn === guest) onData(msg); });   // ignore old connections
+      conn.on('data', (msg) => {
+        if (msg?.t === 'sig') { MediaLink.handle(conn, msg, { config: iceConfig(settings) }); return; }
+        if (conn === guest) onData(msg);   // ignore old connections
+      });
       conn.on('close', () => {
+        MediaLink.dropConnection(conn);
         if (guest !== conn) return;
         dropGuest('Peri disconnected');
       });
     });
 
-    peer.on('disconnected', () => { if (peer && !peer.destroyed) peer.reconnect(); });
+    peer.on('disconnected', () => { if (!sealed && peer && !peer.destroyed) peer.reconnect(); });
 
     peer.on('error', (err) => {
       if (err.type === 'unavailable-id') {   // code already taken: pick another
         peer.destroy();
+        sealed = false;
         openRoom();
         return;
       }
@@ -228,8 +238,29 @@ const Host = (() => {
     guest = null;
     if (call) { call.close(); call = null; }
     if (old) { try { old.close(); } catch { /* already gone */ } }
+    unseal();
     setStatus('Waiting for Peri…', 'warn');
     log('act', reason);
+  }
+
+  // ---------- sealing ----------
+  function seal() {
+    if (sealed || !peer) return;
+    sealed = true;
+    try { peer.disconnect(); } catch { /* already off */ }
+    setStatus('Peri jacked in · 🔒 sealed', 'live');
+    log('act', '🔒 Room sealed — nobody else can find it now');
+  }
+  // Peri dropped: reopen the same code so she can rejoin (seals again when she's back)
+  function unseal() {
+    if (!sealed || !peer) return;
+    sealed = false;
+    if (peer.disconnected && !peer.destroyed) peer.reconnect();
+    log('act', '🔓 Room reopened so Peri can rejoin');
+  }
+  function showCode(visible) {
+    $('room-code').textContent = visible ? formatCode(roomCode) : '••••-••••-••••-••••';
+    $('room-code').classList.toggle('hidden-code', !visible);
   }
 
   // ---------- commands from the Operator ----------
@@ -404,6 +435,7 @@ const Host = (() => {
     if (call) call.close();
     if (guest) guest.close();
     if (peer) peer.destroy();
+    sealed = false;
     if (stream) stream.getTracks().forEach((t) => t.stop());
     clearInterval(stateTimer);
     call = guest = peer = stream = null;
@@ -467,7 +499,10 @@ const Host = (() => {
     });
     $('start-host').addEventListener('click', start);
     $('stop-host').addEventListener('click', stop);
-    $('copy-code').addEventListener('click', () => navigator.clipboard.writeText(roomCode || ''));
+    $('copy-code').addEventListener('click', () => navigator.clipboard.writeText(formatCode(roomCode || '')));
+    $('show-code').addEventListener('click', () => showCode($('room-code').classList.contains('hidden-code')));
+    // Peri went quiet without hanging up (crash, Wi-Fi): reopen so she can get back in
+    setInterval(() => { if (sealed && guest && Date.now() - lastHeartbeat > 8000) unseal(); }, 2000);
     $('refresh-sources').addEventListener('click', () => loadSources());
   });
 

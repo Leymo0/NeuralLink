@@ -89,7 +89,7 @@ button { font: inherit; cursor: pointer; }
 .source.selected { border-color: var(--red); box-shadow: 0 0 12px var(--red-glow); }
 .room-panel { display: flex; flex-direction: column; gap: 12px; }
 .room-code-label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.3em; color: var(--muted); }
-.room-code { font-family: var(--mono); font-size: 52px; letter-spacing: 0.2em; color: var(--cyan); text-shadow: 0 0 18px rgba(92, 242, 230, 0.4); }
+.room-code { font-family: var(--mono); font-size: 26px; letter-spacing: 0.1em; color: var(--cyan); text-shadow: 0 0 18px rgba(92, 242, 230, 0.4); }
 #room-live { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 #room-live .room-code-label, #room-live .room-code { width: 100%; }
 #host-preview { width: 100%; aspect-ratio: 16/9; background: #000; border: 1px solid var(--line); }

@@ -6,7 +6,12 @@ const ROOM_PREFIX = 'neurallink-cp77-';           // keeps our rooms apart on th
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';  // no 0/O or 1/I mix-ups
 const MAX_SLOTS = 8;   // hack slots Peri can bind (his deck has up to this many)
 
-function randomCode(length = 6) {
+// 16 characters: impossible to guess, so nobody can stumble into the room. Shown as XXXX-XXXX-XXXX-XXXX.
+const CODE_LENGTH = 16;
+const formatCode = (c) => (c || '').match(/.{1,4}/g)?.join('-') || '';
+const cleanCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+function randomCode(length = CODE_LENGTH) {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
   return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
 }

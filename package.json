@@ -1,7 +1,7 @@
 {
   "name": "neurallink",
   "productName": "NeuralLink",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "private": true,
   "description": "Cyberpunk 2077 co-op: one plays, the Operator watches, hacks and talks in his head",
   "main": "main.js",

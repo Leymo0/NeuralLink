@@ -1,12 +1,10 @@
-**NeuralLink 0.6.5** — smoother, steadier stream
+**NeuralLink 0.6.6**: sealed room + unguessable codes 🔒
 
-- **Stream quality** setting on the Host screen: **1080p 60** (default), **1080p 30**, or **720p 60** — or **Legacy**, which streams exactly like 0.6.4 if that already worked well for you. The new presets cap the picture is capped at that size instead of sending the host's full screen resolution (1440p / ultrawide / 4K), which is much lighter to compress.
-- **H.264 video** — usually compressed by the graphics card on Windows, leaving the CPU for Cyberpunk (before: VP8 on the CPU).
-- **Starts sharp**: the connection now starts at a sensible speed instead of showing a blurry picture for the first 10–20 seconds, and doesn't collapse to potato quality on a small hiccup.
-- **Smooth playback** for Peri: a tiny ~150 ms buffer that hides a shaky connection (Join screen; untick for lowest delay).
-- **Live stats** on both sides: resolution · fps · codec · speed · ping — and on the host, whether the stream is *held back by this PC* or *by the internet*, so you know which setting to change.
+- **The room seals itself as soon as Peri jacks in.** It drops off the lobby server, so nobody else can find it or reach the host, even with the code. It's 1-on-1, so no one else ever needs to.
+- **If Peri drops** (crash, Wi-Fi), the room reopens by itself so she can rejoin with the same code, then seals again.
+- **Room codes are now 16 characters** (like `K7QM-2XRP-9TWD-H4NC`), impossible to guess. The code is hidden on screen (👁 to show it); use **Copy** and paste.
+- The video handshake now goes over the direct connection instead of the lobby server.
 
-### Update
-Both of you: **Install / Update** (Host) or **Check for updates** (home screen).
+⚠ Both of you need to update. Older versions can't connect to 0.6.6.
 
 Bundled third-party mods: [Cyber Engine Tweaks](https://github.com/maximegmd/CyberEngineTweaks) and [redscript](https://github.com/jac3km4/redscript) (MIT).

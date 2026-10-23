@@ -27,6 +27,11 @@ const COMMON_GAME_FOLDERS = [
   'C:/Program Files/Epic Games/Cyberpunk2077',
 ];
 
+// Separate profile folder (testing several copies on one PC)
+if (process.env.NEURALLINK_PROFILE) app.setPath('userData', process.env.NEURALLINK_PROFILE);
+// (NEURALLINK_SCREENS_ONLY: test machines without a window manager can't list windows)
+const SOURCE_TYPES = process.env.NEURALLINK_SCREENS_ONLY ? ['screen'] : ['screen', 'window'];
+
 let win;
 
 // ---------------------------------------------------------------------------
@@ -313,7 +318,7 @@ ipcMain.handle('game:state', () => {
 // Screens and windows the host can share
 ipcMain.handle('capture:sources', async () => {
   const sources = await desktopCapturer.getSources({
-    types: ['screen', 'window'],
+    types: SOURCE_TYPES,
     thumbnailSize: { width: 320, height: 180 },
   });
   return sources.map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));
@@ -340,7 +345,7 @@ function createWindow() {
 
 // Only one NeuralLink at a time. Opening it again brings the existing window forward
 // (or recreates it if a background copy lost its window).
-const isSelfTest = !!process.env.NEURALLINK_SELFTEST_GAME;
+const isSelfTest = !!process.env.NEURALLINK_SELFTEST_GAME || !!process.env.NEURALLINK_TEST;
 const gotLock = isSelfTest || app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -371,7 +376,7 @@ app.whenReady().then(() => {
   // plus system audio (Windows) so the Operator hears cutscenes.
   session.defaultSession.setDisplayMediaRequestHandler(async (_req, callback) => {
     const settings = loadSettings();
-    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+    const sources = await desktopCapturer.getSources({ types: SOURCE_TYPES });
     // Window IDs change every time a program restarts, so fall back to a Cyberpunk window, then the first screen
     const source = sources.find((s) => s.id === settings.captureSourceId)
                 || (settings.captureSourceId?.startsWith('window:') && sources.find((s) => /cyberpunk/i.test(s.name)))

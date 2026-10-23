@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' https: wss:">
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' https: wss: http://127.0.0.1:* ws://127.0.0.1:*">
 <title>NeuralLink</title>
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -94,7 +94,8 @@
       </div>
       <div id="room-live" hidden>
         <div class="room-code-label">ROOM CODE</div>
-        <div id="room-code" class="room-code">------</div>
+        <div id="room-code" class="room-code">••••-••••-••••-••••</div>
+        <button id="show-code" class="small" title="Show / hide the code">👁</button>
         <button id="copy-code" class="small">Copy</button>
         <button id="stop-host" class="small danger">Close room</button>
       </div>
@@ -120,7 +121,7 @@
   <div class="join-wrap">
     <div class="panel join-panel">
       <h2>Room code</h2>
-      <input id="join-code" class="code-input" maxlength="6" placeholder="ABC123" spellcheck="false" autocomplete="off">
+      <input id="join-code" class="code-input" maxlength="40" placeholder="Paste the code" spellcheck="false" autocomplete="off">
       <button id="join-btn" class="primary">Jack in</button>
       <div id="join-error" class="error"></div>
     </div>
@@ -219,6 +220,7 @@
 
 <script src="node_modules/peerjs/dist/peerjs.min.js"></script>
 <script src="shared.js"></script>
+<script src="medialink.js"></script>
 <script src="host.js"></script>
 <script src="guest.js"></script>
 </body>

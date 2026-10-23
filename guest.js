@@ -101,8 +101,8 @@ const Guest = (() => {
   }
 
   function connect() {
-    code = $('join-code').value.trim().toUpperCase();
-    if (!/^[A-Z0-9]{6}$/.test(code)) return joinError('Room codes are 6 letters/numbers.');
+    code = cleanCode($('join-code').value);
+    if (code.length !== CODE_LENGTH) return joinError('Paste the full room code (16 letters/numbers, like K7QM-2XRP-9TWD-H4NC).');
 
     $('join-error').textContent = 'Connecting…';
     state = null;
@@ -111,7 +111,7 @@ const Guest = (() => {
     $('join-btn').disabled = true;
     cleanup();
 
-    peer = new Peer({ config: iceConfig(settings) });
+    peer = new Peer({ config: iceConfig(settings), ...(settings.peerServer || {}) });
 
     peer.on('open', () => {
       conn = peer.connect(ROOM_PREFIX + code, { reliable: true, metadata: { operatorId: settings.operatorId } });
@@ -120,10 +120,13 @@ const Guest = (() => {
       conn.on('close', lost);
     });
 
-    // The host calls us with his screen once the data link is open
-    peer.on('call', (call) => {
+    watchErrors();
+  }
+
+  // The host calls us with his screen once the data link is open (handshake over the data link)
+  function onCall(call) {
       legacyStream = !!call.metadata?.legacy;
-      call.answer(undefined, { sdpTransform: legacyStream ? hiFiAudioSdp : streamSdp });
+      call.answer({ sdpTransform: legacyStream ? hiFiAudioSdp : streamSdp });
       currentCall = call;
       call.on('stream', (stream) => {
         clearTimeout(connectTimeout);
@@ -140,8 +143,9 @@ const Guest = (() => {
         toast('Jacked in');
       });
       call.on('close', lost);
-    });
+  }
 
+  function watchErrors() {
     peer.on('error', (err) => {
       if (err.type === 'peer-unavailable') return joinError('No room with that code. Check it with the host.');
       joinError('Connection error: ' + err.type);
@@ -156,6 +160,7 @@ const Guest = (() => {
 
   function onData(msg) {
     if (!msg || typeof msg !== 'object') return;
+    if (msg.t === 'sig') { MediaLink.handle(conn, msg, { config: iceConfig(settings), allowIncoming: true, onCall }); return; }
     if (msg.type === 'busy') { joinError('Someone else is already the Operator in this room.'); cleanup(); }
     // (round-trip time now comes from the stream stats)
     if (msg.type === 'ack' && !msg.ok) toast('Host’s game didn’t get it — is the mod installed?');
@@ -207,7 +212,7 @@ const Guest = (() => {
     $('hack-menu').hidden = true;
     clearInterval(hbTimer);
     clearTimeout(connectTimeout);
-    if (conn) conn.close();
+    if (conn) { MediaLink.dropConnection(conn); conn.close(); }
     if (peer) peer.destroy();
     conn = peer = null;
     $('stage-video').srcObject = null;
@@ -638,11 +643,11 @@ const Guest = (() => {
     });
     document.querySelectorAll('.icon-choice').forEach((b) => b.addEventListener('click', () => pickIcon(b.dataset.icon)));
     $('join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
-    $('join-code').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+    $('join-code').addEventListener('input', (e) => { e.target.value = formatCode(cleanCode(e.target.value).slice(0, CODE_LENGTH)); });
 
     $('leave').addEventListener('click', () => { leave(); showView('join'); });
     $('lost-leave').addEventListener('click', () => { leave(); showView('join'); });
-    $('rejoin').addEventListener('click', () => { $('join-code').value = code; showView('join'); connect(); });
+    $('rejoin').addEventListener('click', () => { $('join-code').value = formatCode(code); showView('join'); connect(); });
     $('volume').addEventListener('input', (e) => { $('stage-video').volume = Number(e.target.value); });
     // Don't let the console's controls keep keyboard focus (Space/Enter would trigger them)
     ['volume', 'leave'].forEach((id) => $(id).addEventListener('mouseup', () => setTimeout(() => $(id).blur(), 0)));
