@@ -13,14 +13,15 @@ const MODS = [
     key: 'cet',
     name: 'Cyber Engine Tweaks',
     repo: 'maximegmd/CyberEngineTweaks',
-    asset: /^cet_[\d.]+\.zip$/i,
+    // cet_1.37.1.zip, cet_1_38_0.zip, ... (the naming changed in 1.38.0)
+    asset: /^cet[_-]v?\d+[\d._-]*\.zip$/i,
     check: path.join('bin', 'x64', 'plugins', 'cyber_engine_tweaks.asi'),
   },
   {
     key: 'redscript',
     name: 'redscript',
     repo: 'jac3km4/redscript',
-    asset: /^redscript-v[\d.]+-windows\.zip$/i,
+    asset: /^redscript-v?\d+[\d._-]*-windows\.zip$/i,
     check: path.join('engine', 'tools', 'scc.exe'),
   },
 ];

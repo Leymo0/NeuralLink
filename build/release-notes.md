@@ -1,11 +1,11 @@
-**NeuralLink 0.6.3** — fixes "NeuralLink won't open"
+**NeuralLink 0.6.4** — Cyberpunk patch 2.5
 
-Releases 0.4.0–0.6.2 published here were packed incorrectly by the build and **won't start** after installing or updating. Sorry! This version is packed correctly, and every release is now checked automatically before it's published.
+- **Install / Update** now finds **Cyber Engine Tweaks 1.38.0** (CET renamed its download file with this release, so older NeuralLink versions silently kept the old CET) and **redscript 0.5.32** — both needed for patch 2.5.
+- If NeuralLink can't get the latest CET/redscript, it now says so clearly instead of quietly installing the built-in copy.
+- The built-in copies (used when offline) are now CET 1.38.0 and redscript 0.5.32.
 
-### If NeuralLink won't open
-1. Download **NeuralLink-Setup-0.6.3.exe** below and run it. Your settings are kept.
-2. Open NeuralLink as usual. From now on, Install / Update works normally.
-
-Includes everything so far: real quickhacks, focus name tags, OVERRIDE ultimate with voice line, experimental cyberdeck, high-quality game audio, safer updates.
+### After updating
+Host → **Install / Update** with Cyberpunk closed. The green line should say **CET 1.38.0 · redscript 0.5.32**.
+If redscript says "Failed to load the original script cache": delete `r6\cache\final.redscripts.bk`, verify game files in Steam, then Install / Update again.
 
 Bundled third-party mods: [Cyber Engine Tweaks](https://github.com/maximegmd/CyberEngineTweaks) and [redscript](https://github.com/jac3km4/redscript) (MIT).

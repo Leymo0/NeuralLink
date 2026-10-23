@@ -32,8 +32,8 @@ jobs:
           New-Item -ItemType Directory -Force thirdparty/game | Out-Null
           $headers = @{ 'User-Agent' = 'NeuralLink-CI'; Authorization = "Bearer $env:GH_TOKEN" }
           $mods = @(
-            @{ repo = 'maximegmd/CyberEngineTweaks'; pattern = '^cet_[\d.]+\.zip$' },
-            @{ repo = 'jac3km4/redscript';           pattern = '^redscript-v[\d.]+-windows\.zip$' }
+            @{ repo = 'maximegmd/CyberEngineTweaks'; pattern = '^cet[_-]v?\d+[\d._-]*\.zip$' },
+            @{ repo = 'jac3km4/redscript';           pattern = '^redscript-v?\d+[\d._-]*-windows\.zip$' }
           )
           foreach ($m in $mods) {
             $release = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/$($m.repo)/releases/latest"

@@ -63,7 +63,9 @@ function describeUpdate(res) {
   for (const [key, label] of [['cet', 'CET'], ['redscript', 'redscript']]) {
     const m = res.mods?.[key];
     if (!m) continue;
-    parts.push(`${label} ${m.version}${m.source === 'bundled' ? ' (built-in, offline)' : ''}`);
+    parts.push(m.source === 'bundled'
+      ? `${label}: built-in copy — couldn't get the latest (${m.error || 'no internet?'})`
+      : `${label} ${m.version}`);
   }
   return parts.join(' · ');
 }
