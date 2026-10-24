@@ -10,7 +10,9 @@ const path = require('path');
 
 const MOD_SUBPATH = path.join('bin', 'x64', 'plugins', 'cyber_engine_tweaks', 'mods', 'CoopOperator');
 // Installed app: bundled files sit next to the app in "resources"; during development, in this folder
-const RES = app.isPackaged ? process.resourcesPath : __dirname;
+// Bundled mod + CET/redscript sit next to the app in "resources" (installed app, and the
+// no-installer zip that runs the plain electron.exe); in a source checkout they're in this folder.
+const RES = fs.existsSync(path.join(process.resourcesPath, 'mod', 'CoopOperator')) ? process.resourcesPath : __dirname;
 const BUNDLED_MOD = path.join(RES, 'mod', 'CoopOperator');
 const BUNDLED_THIRDPARTY = path.join(RES, 'thirdparty', 'game');   // Cyber Engine Tweaks + redscript
 const REDS_SUBPATH = path.join('r6', 'scripts', 'PeriLink');
