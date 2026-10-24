@@ -333,6 +333,56 @@ public func PeriLinkName() -> String {
   return PeriLinkApi.Clean(GetLocalizedText(this.GetDisplayName()));
 }
 
+// For the OVERRIDE radar: "<threat>|<upload 0..1>|<hack>,<hack>"
+//   threat: red (hostile, or aggressive and not friendly — the game's own red nameplate rule),
+//           yellow (neutral and could fight), civ (civilians / crowd / friendly), dead
+//   upload: how far a quickhack upload on this NPC has got (0 = none)
+//   hacks:  quickhack effects currently on it, by their in-game names
+@addMethod(ScriptedPuppet)
+public func PeriLinkThreat() -> String {
+  if this.IsDead() || ScriptedPuppet.IsDefeated(this) || ScriptedPuppet.IsUnconscious(this) {
+    return "dead|0|";
+  }
+  let player = GetPlayer(this.GetGame());
+  let threat = "civ";
+  if IsDefined(player) {
+    let attitude = GameObject.GetAttitudeTowards(this, player);
+    let npc = this as NPCPuppet;
+    let aggressive = IsDefined(npc) && npc.IsAggressive() && NotEquals(attitude, EAIAttitude.AIA_Friendly);
+    if Equals(attitude, EAIAttitude.AIA_Hostile) || aggressive {
+      threat = "red";
+    } else {
+      if Equals(attitude, EAIAttitude.AIA_Neutral) && !this.IsCharacterCivilian() && !this.IsCrowd() {
+        threat = "yellow";
+      }
+    }
+  }
+
+  let names = "";
+  let hacks: array<ref<StatusEffect>>;
+  StatusEffectHelper.GetAppliedEffectsWithTag(this, n"Quickhack", hacks);
+  for hack in hacks {
+    let record = hack.GetRecord();
+    let name = "";
+    if IsDefined(record) && IsDefined(record.UiData()) {
+      name = GetLocalizedText(record.UiData().DisplayName());
+    }
+    name = StrReplaceAll(StrReplaceAll(PeriLinkApi.Clean(name), ",", " "), "\"", "");
+    if StrLen(name) > 0 && !StrContains(names, name) {
+      if StrLen(names) > 0 { names += ","; }
+      names += name;
+    }
+  }
+
+  let upload = 0.0;
+  let pools = GameInstance.GetStatPoolsSystem(this.GetGame());
+  let statsId = Cast<StatsObjectID>(this.GetEntityID());
+  if pools.IsStatPoolAdded(statsId, gamedataStatPoolType.QuickHackUpload) {
+    upload = pools.GetStatPoolValue(statsId, gamedataStatPoolType.QuickHackUpload, true) / 100.0;
+  }
+  return threat + "|" + FloatToStringPrec(upload, 2) + "|" + names;
+}
+
 // Experimental: the same list, built from Peri's virtual deck (no cyberdeck needed).
 // Mirrors the game's own checks; RAM is paid from Peri's pool, not his.
 @addMethod(ScriptedPuppet)
