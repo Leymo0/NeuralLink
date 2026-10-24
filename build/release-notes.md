@@ -1,4 +1,6 @@
-**NeuralLink 0.7.0**: focus slows his mouse too
+**NeuralLink 0.7.1**: real enemy names, and focus slows his mouse too
+
+- **Enemies show the names the game's scanner uses**: named characters by name, everyone else by gang and role (e.g. *Tyger Claws Netrunner*, *Maelstrom Heavy*) instead of a generic "NC Resident". This applies to the OVERRIDE radar and the focus name tags.
 
 - **While you hold focus (Space), his camera turns at 25% speed** (mouse and controller). Before, the world slowed down but he could still whip the view around while you were aiming.
 - His normal sensitivity comes back the moment focus ends, runs out, or he pauses or opens the menu.

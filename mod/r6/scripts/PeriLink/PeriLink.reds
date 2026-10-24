@@ -328,9 +328,31 @@ public func PeriLinkBuildCommands() -> array<ref<QuickhackData>> {
   return commands;
 }
 
+// Name like the game's scanner shows it: real names for named characters,
+// otherwise "<faction> <archetype>" (e.g. "Tyger Claws Netrunner") instead of a generic "NC Resident"
 @addMethod(ScriptedPuppet)
 public func PeriLinkName() -> String {
-  return PeriLinkApi.Clean(GetLocalizedText(this.GetDisplayName()));
+  let rec = TweakDBInterface.GetCharacterRecord(this.GetRecordID());
+  if !IsDefined(rec) || this.IsCharacterCivilian() || this.IsCrowd() {
+    return PeriLinkApi.Clean(GetLocalizedText(this.GetDisplayName()));
+  }
+  if IsNameValid(rec.FullDisplayName()) {
+    let full = GetLocalizedTextByKey(rec.FullDisplayName());
+    if StrLen(full) > 0 { return PeriLinkApi.Clean(full); }
+  }
+  let faction = "";
+  let aff = rec.Affiliation();
+  if IsDefined(aff) && IsNameValid(aff.LocalizedName()) { faction = GetLocalizedTextByKey(aff.LocalizedName()); }
+  let role = "";
+  let arch = rec.ArchetypeData();
+  if IsDefined(arch) && IsDefined(arch.Type()) && IsNameValid(arch.Type().LocalizedName()) && !rec.SkipDisplayArchetype() {
+    role = GetLocalizedTextByKey(arch.Type().LocalizedName());
+  }
+  let name = faction;
+  if StrLen(role) > 0 { name = StrLen(name) > 0 ? name + " " + role : role; }
+  if StrLen(name) == 0 && IsNameValid(rec.DisplayName()) { name = GetLocalizedTextByKey(rec.DisplayName()); }
+  if StrLen(name) == 0 { name = GetLocalizedText(this.GetDisplayName()); }
+  return PeriLinkApi.Clean(name);
 }
 
 // For the OVERRIDE radar: "<threat>|<upload 0..1>|<hack>,<hack>"
