@@ -165,6 +165,23 @@ local function addMarker(x, y, label, kind)
 end
 
 ---------------------------------------------------------------------------
+-- Is there a world to touch?
+-- On the main menu, loading screens and while the game is paused, V and the world aren't
+-- (fully) there. Asking the game about them then can crash it, so all world work waits.
+---------------------------------------------------------------------------
+
+local worldReady = false
+
+local function checkWorld()
+    local ok, ready = pcall(function()
+        local sys = Game.GetSystemRequestsHandler()
+        if not sys or sys:IsPreGame() or sys:IsGamePaused() then return false end
+        return Game.GetPlayer() ~= nil
+    end)
+    return ok and ready == true
+end
+
+---------------------------------------------------------------------------
 -- Finding enemies on screen
 ---------------------------------------------------------------------------
 
@@ -262,6 +279,7 @@ end
 
 -- mode 1 = burst (V full speed), mode 2 = focus (everything slows). See PeriLink.reds.
 local function setSlow(mode, on, dilation)
+    if on and not worldReady then return false end
     local player = Game.GetPlayer()
     if not player then return false end
     local ok, res = pcall(function() return PeriLinkApi.Slow(player, mode, on, dilation or 1.0) end)
@@ -305,6 +323,7 @@ end
 
 -- Read his deck + RAM (shown in Peri's app)
 local function refreshDeck()
+    if not worldReady then return end
     local player = Game.GetPlayer()
     if not player or not scriptsLoaded() then return end
     pcall(function()
@@ -332,6 +351,7 @@ local function refreshDeck()
 end
 
 local function applyHostLock()
+    if not worldReady then return end
     local player = Game.GetPlayer()
     if not player or not scriptsLoaded() then return end
     pcall(function() PeriLinkApi.SetHostCanHack(player, Coop.hostCanHack) end)
@@ -664,7 +684,17 @@ local function parsePoint(arg)
     return nil
 end
 
+local WORLD_COMMANDS = { hack = true, menu = true, pick = true, focus = true, aim = true, ult = true, ulthack = true, ultmenu = true, aimid = true }
+
 local function handleCommand(cmd, arg)
+    if WORLD_COMMANDS[cmd] and not worldReady then
+        -- main menu / loading / paused: chat and pings still work, hacking waits
+        if cmd == "hack" or cmd == "menu" or cmd == "ult" or cmd == "ulthack" or cmd == "ultmenu" then
+            setResult(false, "Not in the game right now (menu / loading / paused)")
+        end
+        if cmd == "focus" and arg ~= "1" then Coop.focusHeld = false end
+        return
+    end
     if cmd == "say" then
         -- arg is "<icon>|<name>|<text>" (older senders: just "<text>")
         local icon, name, text = arg:match("^([%w_]*)|([^|]*)|(.*)$")
@@ -881,7 +911,25 @@ registerForEvent("onInit", function()
     print("[CoopOperator] loaded")
 end)
 
+-- The world went away (main menu, loading, pause): let go of every game object we hold
+-- and stop slow-motion, so nothing points at things the game is unloading.
+local function leaveWorld()
+    setSlow(2, false)       -- (does nothing if V is already gone)
+    setSlow(3, false)
+    if Coop.focusHeld then Coop.focusHeld = false end
+    if Coop.ultLeft > 0 then Coop.ultLeft = 0 end
+    Coop.tags, Coop.tagTargets = {}, {}
+    Coop.ultTargets, Coop.ultList = {}, {}
+    Coop.menu = nil
+    Coop.aim = nil
+    writeState()
+end
+
 registerForEvent("onUpdate", function(dt)
+    local ready = checkWorld()
+    if worldReady and not ready then leaveWorld() end
+    worldReady = ready
+
     pollTimer = pollTimer + dt
     if pollTimer >= POLL_INTERVAL then
         pollTimer = 0
@@ -905,7 +953,7 @@ registerForEvent("onUpdate", function(dt)
     end
 
     -- Focus: keep name tags over every target on screen
-    if Coop.focusHeld and Coop.ultLeft <= 0 then
+    if Coop.focusHeld and Coop.ultLeft <= 0 and worldReady then
         tagTimer = tagTimer + dt
         if tagTimer >= 0.25 then
             tagTimer = 0
@@ -918,7 +966,7 @@ registerForEvent("onUpdate", function(dt)
     end
 
     -- Ultimate: count down, keep the radar fresh, and keep the slow-down applied
-    if Coop.ultLeft > 0 then
+    if Coop.ultLeft > 0 and worldReady then
         Coop.ultLeft = Coop.ultLeft - dt
         ultTimer = ultTimer + dt
         if Coop.ultLeft <= 0 then
@@ -942,7 +990,7 @@ registerForEvent("onUpdate", function(dt)
         refreshDeck()
         applyHostLock()
         -- Safety net: keep focus applied while Peri holds it, in case the game cancels it
-        if Coop.focusHeld then setSlow(2, true, Coop.focusDilation) end
+        if Coop.focusHeld and worldReady then setSlow(2, true, Coop.focusDilation) end
         writeState()
     end
 
