@@ -46,6 +46,7 @@ local Coop = {
     focusMax       = 6.0,    -- seconds of focus when the meter is full
     focusRecharge  = 0.5,    -- seconds of meter regained per second
     focusMinStart  = 1.0,    -- need at least this much meter to start
+    focusLookScale = 0.25,   -- his mouse/stick look speed while focusing (1.0 = unchanged)
 
     -- Quickhacks
     hostCanHack    = false,  -- false = only Peri can hack (the host app can change this)
@@ -292,10 +293,119 @@ local function setSlow(mode, on, dilation)
     return ok and res
 end
 
+---------------------------------------------------------------------------
+-- Slow look: while Peri focuses, his camera turns slower too.
+-- Time dilation doesn't touch mouse look, so we lower his look sensitivity in the
+-- game's settings and put it back afterwards. The original values are written to
+-- look-restore.txt first, so a crash mid-focus gets fixed on the next start.
+---------------------------------------------------------------------------
+
+local LOOK_RESTORE = "look-restore.txt"
+local lookSaved = nil   -- { {group, name, kind, value}, ... } while slowed
+local lookReported = false
+
+local function lookVars()
+    local out = {}
+    pcall(function()
+        local settings = Game.GetSettingsSystem()
+        local root = settings and settings:GetGroup("/controls")
+        if not root then return end
+        local function walk(group, depth)
+            if depth > 3 then return end
+            local path = NameToString(group:GetPath()):lower()
+            local isLook = path:find("camera") and (path:find("mouse") or path:find("pad") or path:find("controller"))
+            if isLook then
+                for _, v in ipairs(group:GetVars(false) or {}) do
+                    local name = NameToString(v:GetName())
+                    local low = name:lower()
+                    local skip = low:find("invert") or low:find("smooth") or low:find("accel")
+                              or low:find("dead") or low:find("curve") or low:find("aim")
+                    if not skip then
+                        if v:IsA("ConfigVarFloat") then table.insert(out, { v = v, group = NameToString(group:GetPath()), name = name, kind = "f" })
+                        elseif v:IsA("ConfigVarInt") then table.insert(out, { v = v, group = NameToString(group:GetPath()), name = name, kind = "i" }) end
+                    end
+                end
+            end
+            for _, g in ipairs(group:GetGroups(false) or {}) do walk(g, depth + 1) end
+        end
+        walk(root, 0)
+    end)
+    return out
+end
+
+local function confirmSettings()
+    pcall(function()
+        local settings = Game.GetSettingsSystem()
+        if settings:NeedsConfirmation() then settings:ConfirmChanges() end
+    end)
+end
+
+local function restoreLook()
+    local saved = lookSaved
+    if not saved then
+        -- nothing in memory: maybe the game crashed mid-focus last time
+        local f = io.open(LOOK_RESTORE, "r")
+        if not f then return end
+        saved = {}
+        for line in f:lines() do
+            local group, name, kind, value = line:match("^([^|]+)|([^|]+)|([fi])|(.+)$")
+            if group then table.insert(saved, { group = group, name = name, kind = kind, value = tonumber(value) }) end
+        end
+        f:close()
+    end
+    pcall(function()
+        local settings = Game.GetSettingsSystem()
+        for _, s in ipairs(saved) do
+            local v = settings:GetVar(s.group, s.name)
+            if v and s.value then
+                if s.kind == "i" then v:SetValue(math.floor(s.value + 0.5)) else v:SetValue(s.value) end
+            end
+        end
+    end)
+    confirmSettings()
+    lookSaved = nil
+    os.remove(LOOK_RESTORE)
+end
+
+local function slowLook()
+    if lookSaved or Coop.focusLookScale >= 1.0 then return end
+    local vars = lookVars()
+    if not lookReported then
+        lookReported = true
+        local names = {}
+        for _, e in ipairs(vars) do table.insert(names, e.name) end
+        print("[CoopOperator] slow look settings: " .. (#names > 0 and table.concat(names, ", ") or "none found"))
+    end
+    if #vars == 0 then return end
+    local lines = {}
+    for _, e in ipairs(vars) do
+        e.value = e.v:GetValue()
+        table.insert(lines, string.format("%s|%s|%s|%s", e.group, e.name, e.kind, tostring(e.value)))
+    end
+    local f = io.open(LOOK_RESTORE, "w")
+    if not f then return end      -- no restore file = no change; never risk leaving him slow
+    f:write(table.concat(lines, "\n"))
+    f:close()
+    lookSaved = vars
+    pcall(function()
+        for _, e in ipairs(vars) do
+            local target = e.value * Coop.focusLookScale
+            local lo = e.v:GetMinValue()
+            if e.kind == "i" then
+                e.v:SetValue(math.max(lo, math.floor(target + 0.5)))
+            else
+                e.v:SetValue(math.max(lo, target))
+            end
+        end
+    end)
+    confirmSettings()
+end
+
 local function startFocus()
     if Coop.focusHeld or Coop.focusLeft < Coop.focusMinStart then return end
     if setSlow(2, true, Coop.focusDilation) then
         Coop.focusHeld = true
+        slowLook()
     end
 end
 
@@ -303,6 +413,7 @@ local function stopFocus()
     if not Coop.focusHeld then return end
     Coop.focusHeld = false
     setSlow(2, false)
+    restoreLook()
 end
 
 ---------------------------------------------------------------------------
@@ -717,7 +828,7 @@ local function handleCommand(cmd, arg)
         if cmd == "hack" or cmd == "menu" or cmd == "ult" or cmd == "ulthack" or cmd == "ultmenu" then
             setResult(false, "Not in the game right now (menu / loading / paused)")
         end
-        if cmd == "focus" and arg ~= "1" then Coop.focusHeld = false end
+        if cmd == "focus" and arg ~= "1" then Coop.focusHeld = false; restoreLook() end
         return
     end
     if cmd == "say" then
@@ -933,6 +1044,7 @@ registerHotkey("coop_hud",  "Co-op: Show/hide Peri's window", function() Coop.sh
 
 registerForEvent("onInit", function()
     readInbox(false)  -- ignore anything sent before the game started
+    restoreLook()     -- undo a slowed look left behind by a crash mid-focus
     print("[CoopOperator] loaded")
 end)
 
@@ -942,6 +1054,7 @@ local function leaveWorld()
     setSlow(2, false)       -- (does nothing if V is already gone)
     setSlow(3, false)
     if Coop.focusHeld then Coop.focusHeld = false end
+    restoreLook()           -- pause menu / main menu: his real sensitivity, always
     if Coop.ultLeft > 0 then Coop.ultLeft = 0 end
     Coop.tags, Coop.tagTargets = {}, {}
     Coop.ultTargets, Coop.ultList = {}, {}
@@ -1041,4 +1154,5 @@ end)
 registerForEvent("onShutdown", function()
     setSlow(2, false)
     setSlow(3, false)
+    restoreLook()
 end)
