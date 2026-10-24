@@ -1,6 +1,7 @@
 // Shared bits for the Host and Join screens.
 
 const $ = (id) => document.getElementById(id);
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const ROOM_PREFIX = 'neurallink-cp77-';           // keeps our rooms apart on the public signaling server
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';  // no 0/O or 1/I mix-ups

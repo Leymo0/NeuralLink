@@ -195,12 +195,19 @@
         <span class="radar-title">OVERRIDE</span>
         <span class="radar-track"><span id="radar-fill"></span></span>
         <span id="radar-time">6.0s</span>
-        <span class="radar-hint">hover a name · 1–8 hack · right-click menu · no RAM</span>
+        <span class="radar-hint">1–8 hack the <b>targeted</b> enemy · Tab next enemy · hover to aim · right-click menu · no RAM</span>
       </div>
-      <div id="radar-field">
-        <div class="radar-ring r1"></div><div class="radar-ring r2"></div><div class="radar-ring r3"></div>
-        <div class="radar-v" title="V">▲</div>
-        <div id="radar-dots"></div>
+      <div class="radar-body">
+        <div id="radar-field">
+          <div class="radar-ring r1"></div><div class="radar-ring r2"></div><div class="radar-ring r3"></div>
+          <div class="radar-v" title="V">▲</div>
+          <div id="radar-dots"></div>
+        </div>
+        <div id="radar-side">
+          <div class="radar-side-title">THREATS <span id="radar-count"></span></div>
+          <ol id="radar-list"></ol>
+          <div class="radar-legend"><i class="lg red"></i>fighting you <i class="lg yellow"></i>ready to fight <i class="lg civ"></i>civilian <i class="lg device"></i>device</div>
+        </div>
       </div>
     </div>
     <div id="hack-menu" hidden>

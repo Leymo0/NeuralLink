@@ -353,9 +353,36 @@ const Guest = (() => {
   }, 250);
 
   // ---------- ULTIMATE: OVERRIDE radar ----------
+  // Every target around V as a labelled square. Red = fighting him (big), yellow = ready to fight,
+  // grey = civilians, cyan = devices. Tags on a square = hacks already on that target.
+  // The TARGETED enemy (white outline) is what 1–8 hit: the one under the mouse, else the one
+  // picked with Tab / a click in the list, else the nearest red (then yellow) enemy.
 
-  let hoverId = null;
+  let hoverId = null, pinnedId = null;
   const ultActive = () => (state?.ult?.left || 0) > 0;
+  const THREAT_ORDER = { red: 0, yellow: 1, civ: 2, neutral: 2, device: 3 };
+  const ultTargets = () => state?.ult?.targets || [];
+  const dist = (t) => (t.d != null ? t.d : Math.hypot(t.x, t.y));
+
+  // Red first, then yellow; nearest first inside each
+  function threatList() {
+    return ultTargets()
+      .filter((t) => t.threat === 'red' || t.threat === 'yellow')
+      .sort((a, b) => (THREAT_ORDER[a.threat] - THREAT_ORDER[b.threat]) || (dist(a) - dist(b)));
+  }
+
+  function targetedId() {
+    const ids = new Set(ultTargets().map((t) => t.id));
+    if (hoverId && ids.has(hoverId)) return hoverId;
+    if (pinnedId && ids.has(pinnedId)) return pinnedId;
+    return threatList()[0]?.id || null;
+  }
+
+  function fxTags(t) {
+    const tags = (t.fx || []).slice(0, 4).map((f) => `<em>${escapeHtml(f)}</em>`).join('');
+    const up = t.up > 0 ? `<b class="up"><span style="width:${Math.round(Math.min(1, t.up) * 100)}%"></span></b>` : '';
+    return tags + up;
+  }
 
   function renderUlt() {
     const u = state?.ult;
@@ -368,7 +395,7 @@ const Guest = (() => {
     }
     const radar = $('radar');
     if (!u || u.left <= 0) {
-      if (!radar.hidden) { radar.hidden = true; hoverId = null; }
+      if (!radar.hidden) { radar.hidden = true; hoverId = null; pinnedId = null; }
       return;
     }
     radar.hidden = false;
@@ -380,45 +407,101 @@ const Guest = (() => {
     const size = field.clientWidth;
     const dots = $('radar-dots');
     dots.innerHTML = '';
-    for (const t of u.targets || []) {
+    const targeted = targetedId();
+    // draw the important ones last so they sit on top
+    const sorted = [...(u.targets || [])].sort((a, b) => (THREAT_ORDER[b.threat] ?? 2) - (THREAT_ORDER[a.threat] ?? 2));
+    const placed = [];
+    for (const t of sorted) {
       // x = meters to V's right, y = meters ahead; V faces up
       const r = Math.min(1, Math.hypot(t.x, t.y) / (u.radius || 40)) * 0.5;
       const ang = Math.atan2(t.x, t.y);
       const px = size / 2 + Math.sin(ang) * r * size;
       const py = size / 2 - Math.cos(ang) * r * size;
+      const threat = t.kind === 'device' ? 'device' : (t.threat || 'neutral');
       const el = document.createElement('div');
-      el.className = 'radar-dot ' + t.kind + (t.id === hoverId ? ' hover' : '');
+      el.className = `rsq ${threat}` + (t.id === targeted ? ' targeted' : '') + (t.id === hoverId ? ' hover' : '');
       el.dataset.id = t.id;
+      el.innerHTML = '<span class="nm"></span><span class="fx"></span>';
+      el.querySelector('.nm').textContent = threat === 'civ' ? '' : t.name;
+      el.querySelector('.fx').innerHTML = fxTags(t);
       el.style.left = `${px}px`;
       el.style.top = `${py}px`;
-      el.innerHTML = '<i></i><span></span>';
-      el.querySelector('span').textContent = t.name;
       dots.appendChild(el);
+      placed.push(el);
     }
-    updateHover();
+    // nudge overlapping labels apart (most dangerous ones keep their spot)
+    const boxes = [];
+    for (const el of placed.reverse()) {
+      let b = el.getBoundingClientRect();
+      for (let tries = 0; tries < 8; tries++) {
+        const hit = boxes.find((o) => b.left < o.right && b.right > o.left && b.top < o.bottom && b.bottom > o.top);
+        if (!hit) break;
+        el.style.top = `${parseFloat(el.style.top) + (hit.bottom - b.top) + 2}px`;
+        b = el.getBoundingClientRect();
+      }
+      boxes.push(b);
+    }
+
+    // the threat list
+    const list = threatList();
+    $('radar-count').textContent = list.length ? `${list.filter((t) => t.threat === 'red').length} red · ${list.filter((t) => t.threat === 'yellow').length} yellow` : 'none';
+    const ol = $('radar-list');
+    ol.innerHTML = '';
+    for (const t of list.slice(0, 12)) {
+      const li = document.createElement('li');
+      li.className = `${t.threat}` + (t.id === targeted ? ' targeted' : '');
+      li.dataset.id = t.id;
+      li.innerHTML = '<span class="nm"></span><span class="m"></span><span class="fx"></span>';
+      li.querySelector('.nm').textContent = t.name;
+      li.querySelector('.m').textContent = `${Math.round(dist(t))}m`;
+      li.querySelector('.fx').innerHTML = fxTags(t) || '<i class="none">no hacks yet</i>';
+      ol.appendChild(li);
+    }
+    if (!list.length) ol.innerHTML = '<li class="empty">Nobody hostile around</li>';
   }
 
-  // The radar target nearest the mouse (within 60 px) is the one you hack
+  // Mouse over a square (or a list row) aims at it; otherwise the targeted enemy stays
   function updateHover() {
     if (!ultActive()) return;
-    let best = null, bestD = 60;
+    let best = null, bestD = 40;
     for (const el of $('radar-dots').children) {
-      const b = el.querySelector('i').getBoundingClientRect();
-      const d = Math.hypot(mouse.x - (b.left + b.width / 2), mouse.y - (b.top + b.height / 2));
+      const b = el.getBoundingClientRect();
+      const dx = Math.max(b.left - mouse.x, 0, mouse.x - b.right), dy = Math.max(b.top - mouse.y, 0, mouse.y - b.bottom);
+      const d = Math.hypot(dx, dy);
       if (d < bestD) { bestD = d; best = el.dataset.id; }
+    }
+    for (const li of $('radar-list').children) {
+      const b = li.getBoundingClientRect();
+      if (mouse.x >= b.left && mouse.x <= b.right && mouse.y >= b.top && mouse.y <= b.bottom) best = li.dataset.id || best;
     }
     if (best !== hoverId) {
       hoverId = best;
-      for (const el of $('radar-dots').children) el.classList.toggle('hover', el.dataset.id === hoverId);
+      const tid = targetedId();
+      for (const el of $('radar-dots').children) {
+        el.classList.toggle('hover', el.dataset.id === hoverId);
+        el.classList.toggle('targeted', el.dataset.id === tid);
+      }
+      for (const li of $('radar-list').children) li.classList.toggle('targeted', li.dataset.id === tid);
     }
   }
 
+  // Tab: next enemy in the threat list (red first, nearest first)
+  function cycleTarget(back) {
+    const list = threatList();
+    if (!list.length) return toast('Nobody hostile around');
+    hoverId = null;
+    const i = list.findIndex((t) => t.id === targetedId());
+    pinnedId = list[(i + (back ? -1 : 1) + list.length) % list.length].id;
+    renderUlt();
+  }
+
   function ultHack(slot) {
-    if (!hoverId) return toast('Hover a target on the map first');
+    const id = targetedId();
+    if (!id) return toast('Nobody to hack — hover a target');
     const deck = state?.deck || [];
     if (slot >= deck.length) return toast(`Slot ${slot + 1} is empty`);
-    send({ cmd: 'ulthack', id: hoverId, slot });
-    const t = (state?.ult?.targets || []).find((x) => x.id === hoverId);
+    send({ cmd: 'ulthack', id, slot });
+    const t = ultTargets().find((x) => x.id === id);
     toast(`${deck[slot].name} → ${t ? t.name : 'target'}`, true);
   }
 
@@ -689,7 +772,7 @@ const Guest = (() => {
       if (menuOpen()) { closeMenu(); return; }      // click away closes the menu
       if (ultActive()) {                            // the radar takes the clicks
         if (e.button === 0) ultHack(selected);
-        if (e.button === 2 && hoverId) send({ cmd: 'ultmenu', id: hoverId });
+        if (e.button === 2 && targetedId()) send({ cmd: 'ultmenu', id: targetedId() });
         return;
       }
       if (hoverTag) {                               // focusing over a name tag
@@ -719,6 +802,7 @@ const Guest = (() => {
       }
 
       if (is('ult')) { e.preventDefault(); if (!e.repeat && send({ cmd: 'ult' })) toast('OVERRIDE', true); return; }
+      if (ultActive() && e.key === 'Tab') { e.preventDefault(); cycleTarget(e.shiftKey); return; }
       if (ultActive() || hoverTag) {
         for (let i = 0; i < MAX_SLOTS; i++) {
           if (kb[`slot${i + 1}`] && is(`slot${i + 1}`)) {

@@ -537,8 +537,24 @@ local function refreshUltTargets()
             local right = dx * fy - dy * fx
             if dx * dx + dy * dy <= Coop.ultRadius * Coop.ultRadius then
                 local name = targetName(id, t.obj, t.kind)
-                targets[id] = { obj = t.obj, kind = t.kind, name = name }
-                list[#list + 1] = { id = id, name = name, kind = t.kind, x = right, y = ahead }
+                -- How dangerous it is right now + hacks already on it, straight from the game
+                -- ("red|0.40|Short Circuit,Overheat"). Older scripts: every NPC counts as red.
+                local threat, up, effects = (t.kind == "device") and "device" or "red", 0, {}
+                if t.kind == "npc" then
+                    local okT, info = pcall(function() return t.obj:PeriLinkThreat() end)
+                    if okT and type(info) == "string" then
+                        local th, upv, fxs = info:match("^(%a+)|([%d%.]+)|(.*)$")
+                        if th then
+                            threat, up = th, tonumber(upv) or 0
+                            for f in fxs:gmatch("[^,]+") do effects[#effects + 1] = f end
+                        end
+                    end
+                end
+                if threat ~= "dead" then
+                    targets[id] = { obj = t.obj, kind = t.kind, name = name }
+                    list[#list + 1] = { id = id, name = name, kind = t.kind, x = right, y = ahead,
+                        threat = threat, up = up, fx = effects, d = math.sqrt(dx * dx + dy * dy) }
+                end
             end
         end)
         if not ok then -- skip targets that vanish mid-read
@@ -645,8 +661,11 @@ local function writeState()
     end
     local targets = {}
     for _, t in ipairs(Coop.ultList) do
-        targets[#targets + 1] = string.format('{"id":%s,"name":%s,"kind":%s,"x":%.1f,"y":%.1f}',
-            jsonString(t.id), jsonString(t.name), jsonString(t.kind), t.x, t.y)
+        local fxj = {}
+        for _, f in ipairs(t.fx or {}) do fxj[#fxj + 1] = jsonString(f) end
+        targets[#targets + 1] = string.format('{"id":%s,"name":%s,"kind":%s,"x":%.1f,"y":%.1f,"d":%.1f,"threat":%s,"up":%.2f,"fx":[%s]}',
+            jsonString(t.id), jsonString(t.name), jsonString(t.kind), t.x, t.y, t.d or 0,
+            jsonString(t.threat or "red"), t.up or 0, table.concat(fxj, ","))
     end
     local tagParts = {}
     for _, t in ipairs(Coop.tags) do
