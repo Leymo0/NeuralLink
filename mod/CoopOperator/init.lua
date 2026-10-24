@@ -170,15 +170,20 @@ end
 -- (fully) there. Asking the game about them then can crash it, so all world work waits.
 ---------------------------------------------------------------------------
 
-local worldReady = false
+-- worldExists: a save is loaded (V and the world are real), maybe paused.
+-- worldReady:  ...and not paused: safe to hack, aim, slow time.
+-- On the main menu the game can hand back a half-built V that isn't nil, so
+-- Game.GetPlayer() alone is NOT enough (that crashed the game in 0.6.7).
+local worldReady, worldExists = false, false
 
 local function checkWorld()
-    local ok, ready = pcall(function()
+    local ok, exists, paused = pcall(function()
         local sys = Game.GetSystemRequestsHandler()
-        if not sys or sys:IsPreGame() or sys:IsGamePaused() then return false end
-        return Game.GetPlayer() ~= nil
+        if not sys or sys:IsPreGame() then return false, false end
+        return Game.GetPlayer() ~= nil, sys:IsGamePaused()
     end)
-    return ok and ready == true
+    if not ok then return false, false end
+    return exists == true and not paused, exists == true
 end
 
 ---------------------------------------------------------------------------
@@ -279,7 +284,8 @@ end
 
 -- mode 1 = burst (V full speed), mode 2 = focus (everything slows). See PeriLink.reds.
 local function setSlow(mode, on, dilation)
-    if on and not worldReady then return false end
+    -- the time system only exists inside a loaded game; touching it on the main menu crashes
+    if not worldExists or (on and not worldReady) then return false end
     local player = Game.GetPlayer()
     if not player then return false end
     local ok, res = pcall(function() return PeriLinkApi.Slow(player, mode, on, dilation or 1.0) end)
@@ -926,9 +932,12 @@ local function leaveWorld()
 end
 
 registerForEvent("onUpdate", function(dt)
-    local ready = checkWorld()
-    if worldReady and not ready then leaveWorld() end
-    worldReady = ready
+    local ready, exists = checkWorld()
+    if worldReady and not ready then
+        worldExists = exists          -- leaving to the main menu: don't touch the time system anymore
+        leaveWorld()
+    end
+    worldReady, worldExists = ready, exists
 
     pollTimer = pollTimer + dt
     if pollTimer >= POLL_INTERVAL then
