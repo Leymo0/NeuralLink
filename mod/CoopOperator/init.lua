@@ -203,8 +203,8 @@ local function projectToScreen(worldPos)
     return x, y
 end
 
--- Hackable things the game considers visible to V: NPCs and devices
--- (cameras, turrets, doors, vending machines...). Returns { {obj, kind}, ... }
+-- Hackable things the game considers visible to V: NPCs, devices
+-- (cameras, turrets, doors, vending machines...) and vehicles (with his perk). Returns { {obj, kind}, ... }
 -- everything = true: all targets within radius around V (the ultimate), not just in view
 local function getVisibleTargets(everything, radius)
     local list, seen = {}, {}
@@ -246,6 +246,9 @@ local function getVisibleTargets(everything, radius)
     end)
     query(TSQ_ALL(), function(obj)
         local ok, yes = pcall(function() return obj:IsDevice() and obj:IsQuickHackAble() end)
+        if ok and yes then return "device" end
+        -- cars and bikes: only once he has the Intelligence vehicle-hacking perk (PeriLink.reds checks)
+        ok, yes = pcall(function() return obj:IsVehicle() and obj:PeriLinkHackable() end)
         if ok and yes then return "device" end
     end)
     return list

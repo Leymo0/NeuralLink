@@ -1,4 +1,6 @@
-**NeuralLink 0.7.1**: real enemy names, and focus slows his mouse too
+**NeuralLink 0.7.2**: hack vehicles, real enemy names, slower mouse in focus
+
+- **Vehicles can be hacked** (Take Control, Force Brakes, Accelerate, Detonate), once he has the Intelligence vehicle-hacking perk. It follows his skill tree, the same as when he hacks a car himself. Cars show up like devices: click one (or right-click it on the radar) for its hack menu. The car he's driving is never listed.
 
 - **Enemies show the names the game's scanner uses**: named characters by name, everyone else by gang and role (e.g. *Tyger Claws Netrunner*, *Maelstrom Heavy*) instead of a generic "NC Resident". This applies to the OVERRIDE radar and the focus name tags.
 

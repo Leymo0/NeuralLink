@@ -649,6 +649,102 @@ public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram:
 }
 
 // ---------------------------------------------------------------------------
+// Vehicles: Take Control, Force Brakes, Accelerate, Detonate.
+// The game only offers these once he has the Intelligence vehicle-hacking perk,
+// so his skill tree decides (same as when he hacks a car himself).
+// ---------------------------------------------------------------------------
+
+@addMethod(VehicleObject)
+public func PeriLinkHackable() -> Bool {
+  if this.IsDestroyed() || this.IsPlayerMounted() { return false; }
+  let player = GetPlayer(this.GetGame());
+  if !IsDefined(player) { return false; }
+  if !PlayerDevelopmentSystem.GetData(player).IsNewPerkBoughtAnyLevel(gamedataNewPerkType.Intelligence_Right_Milestone_1) { return false; }
+  let maxDistance = TweakDBInterface.GetFloat(t"player.vehicleQuickHacks.maxRange", 0.00);
+  return maxDistance <= 0.0 || this.GetDistanceToPlayerSquared() < maxDistance * maxDistance;
+}
+
+@addMethod(VehicleObject)
+public func PeriLinkName() -> String {
+  let name = "";
+  let rec = this.GetRecord();
+  if IsDefined(rec) { name = GetLocalizedTextByKey(rec.DisplayName()); }
+  if StrLen(name) == 0 { name = GetLocalizedText(this.GetDisplayName()); }
+  if StrLen(name) == 0 { name = "Vehicle"; }
+  return PeriLinkApi.Clean(name);
+}
+
+@addMethod(VehicleObject)
+public func PeriLinkActions() -> array<ref<DeviceAction>> {
+  let player = GetPlayer(this.GetGame());
+  let context = this.GetVehiclePS().GenerateContext(gamedeviceRequestType.Remote, Device.GetInteractionClearance(), player, this.GetEntityID());
+  let actions: array<ref<DeviceAction>>;
+  this.GetVehiclePS().GetRemoteActions(actions, context);
+  if (this.m_isQhackUploadInProgress && !this.IsActionQueueEnabled()) || this.IsActionQueueFull() {
+    ScriptableDeviceComponentPS.SetActionsInactiveAll(actions, "LocKey#7020");
+  }
+  if this.IsActionQueueEnabled() {
+    QuickHackableQueueHelper.CheckAndSetInactivityReasonForVehicleActions(actions, this.m_currentlyUploadingAction);
+  }
+  return actions;
+}
+
+@addMethod(VehicleObject)
+public func PeriLinkBuildCommands() -> array<ref<QuickhackData>> {
+  let actions = this.PeriLinkActions();
+  let commands: array<ref<QuickhackData>>;
+  QuickHackableHelper.TranslateActionsIntoQuickSlotCommands(actions, commands, this, this.GetVehiclePS());
+  return commands;
+}
+
+// Peri's RAM (experimental mode) or free (OVERRIDE): same hacks, his RAM isn't touched
+@addMethod(VehicleObject)
+public func PeriLinkBuildVirtualCommands() -> array<ref<QuickhackData>> {
+  let commands: array<ref<QuickhackData>>;
+  for a in this.PeriLinkActions() {
+    let sAction = a as ScriptableDeviceAction;
+    if IsDefined(sAction) && IsDefined(sAction.GetObjectActionRecord()) {
+      let cmd = new QuickhackData();
+      cmd.m_title = LocKeyToString(sAction.GetObjectActionRecord().ObjectActionUI().Caption());
+      cmd.m_actionOwner = this.GetEntityID();
+      cmd.m_cost = sAction.GetCost();
+      if sAction.IsInactive() {
+        cmd.m_isLocked = true;
+        cmd.m_inactiveReason = sAction.GetInactiveReason();
+      } else {
+        sAction.SetCanSkipPayCost(true);   // Peri's RAM (or free), not his
+        cmd.m_action = sAction;
+      }
+      ArrayPush(commands, cmd);
+    }
+  }
+  return commands;
+}
+
+@addMethod(VehicleObject)
+public func PeriLinkCommandsFor(virtualMode: Bool, free: Bool) -> array<ref<QuickhackData>> {
+  if virtualMode || free {
+    return this.PeriLinkBuildVirtualCommands();
+  }
+  return this.PeriLinkBuildCommands();
+}
+
+@addMethod(VehicleObject)
+public func PeriLinkMenu(virtualEnabled: Bool, free: Bool) -> array<String> {
+  let virtualMode = PeriLinkApi.UsingVirtual(GetPlayer(this.GetGame()), virtualEnabled);
+  return PeriLinkApi.DescribeCommands(this.PeriLinkCommandsFor(virtualMode, free));
+}
+
+@addMethod(VehicleObject)
+public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram: Int32, free: Bool) -> String {
+  let player = GetPlayer(this.GetGame());
+  let virtualMode = PeriLinkApi.UsingVirtual(player, virtualEnabled);
+  let budget = -1;
+  if virtualMode && !free { budget = ram; }
+  return PeriLinkApi.Pick(player, this, this.PeriLinkCommandsFor(virtualMode, free), index, title, budget);
+}
+
+// ---------------------------------------------------------------------------
 // Optional: block the host from uploading quickhacks himself
 // ---------------------------------------------------------------------------
 
