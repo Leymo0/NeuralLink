@@ -649,6 +649,23 @@ public func PeriLinkPick(index: Int32, title: String, virtualEnabled: Bool, ram:
 }
 
 // ---------------------------------------------------------------------------
+// Mission failsafe: things the current mission needs (quest cars, devices, people).
+// Hacking them can break the mission, so Peri has to confirm first.
+// Hostile quest NPCs (mission enemies, bosses) are fought as normal.
+// ---------------------------------------------------------------------------
+
+@addMethod(GameObject)
+public func PeriLinkIsMission() -> Bool {
+  if !this.IsQuest() { return false; }
+  let puppet = this as ScriptedPuppet;
+  if IsDefined(puppet) {
+    let player = GetPlayer(this.GetGame());
+    if IsDefined(player) && Equals(GameObject.GetAttitudeTowards(this, player), EAIAttitude.AIA_Hostile) { return false; }
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Vehicles: Take Control, Force Brakes, Accelerate, Detonate.
 // The game only offers these once he has the Intelligence vehicle-hacking perk,
 // so his skill tree decides (same as when he hacks a car himself).

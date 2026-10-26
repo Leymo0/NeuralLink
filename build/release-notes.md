@@ -1,4 +1,7 @@
-**NeuralLink 0.7.2**: hack vehicles, real enemy names, slower mouse in focus
+**NeuralLink 0.7.3**: mission failsafe, hack vehicles, real enemy names, slower mouse in focus
+
+- **Mission things are protected.** Cars, devices and friendly characters that the current mission needs are marked **⚠** on the radar, the focus tags and in the hack menu. Hacking one by accident could break the mission, so the first try only warns you. Do it again within 6 seconds if you really mean it. Mission enemies and bosses are fought as normal (no warning).
+
 
 - **Vehicles can be hacked** (Take Control, Force Brakes, Accelerate, Detonate), once he has the Intelligence vehicle-hacking perk. It follows his skill tree, the same as when he hacks a car himself. Cars show up like devices: click one (or right-click it on the radar) for its hack menu. The car he's driving is never listed.
 

@@ -48,6 +48,12 @@ local Coop = {
     focusMinStart  = 1.0,    -- need at least this much meter to start
     focusLookScale = 0.25,   -- his mouse/stick look speed while focusing (1.0 = unchanged)
 
+    -- Mission failsafe: hacking a quest car / device / friendly quest NPC needs a second go
+    protectMissions    = true,
+    missionConfirmTime = 6.0,   -- seconds to confirm
+    missionConfirm     = nil,
+    clock              = 0,
+
     -- Quickhacks
     hostCanHack    = false,  -- false = only Peri can hack (the host app can change this)
 
@@ -441,6 +447,28 @@ local function setResult(ok, text)
     while #results > 6 do table.remove(results, 1) end
 end
 
+-- Mission failsafe: a quest car / device / friendly quest character needs a second go
+-- within a few seconds (hacking them by accident can break the mission).
+local function isMission(obj)
+    local ok, yes = pcall(function() return obj:PeriLinkIsMission() end)
+    return ok and yes == true
+end
+
+local function missionOk(obj, name)
+    if not Coop.protectMissions or not isMission(obj) then return true end
+    local key = ""
+    pcall(function() key = tostring(obj:GetEntityID().hash) end)
+    local c = Coop.missionConfirm
+    if c and c.id == key and Coop.clock <= c.untilT then
+        Coop.missionConfirm = nil
+        return true
+    end
+    Coop.missionConfirm = { id = key, untilT = Coop.clock + Coop.missionConfirmTime }
+    setResult(false, string.format("⚠ %s is part of a mission. Hacking it can break the mission: do it again within %d s if you're sure.",
+        name or "That", math.floor(Coop.missionConfirmTime)))
+    return false
+end
+
 -- Read his deck + RAM (shown in Peri's app)
 local function refreshDeck()
     if not worldReady then return end
@@ -529,7 +557,9 @@ local function openMenu(sx, sy, target, tx, ty)
             end
         end
         Coop.menuSeq = Coop.menuSeq + 1
-        Coop.menu = { seq = Coop.menuSeq, target = target, name = target:PeriLinkName(), x = tx, y = ty, items = items }
+        local name = target:PeriLinkName()
+        if Coop.protectMissions and isMission(target) then name = "⚠ MISSION · " .. name end
+        Coop.menu = { seq = Coop.menuSeq, target = target, name = name, x = tx, y = ty, items = items }
     end)
     if ok then
         if tx then addMarker(tx, ty, "SCANNING", "ping") end
@@ -544,6 +574,7 @@ local function pickFromMenu(seq, index, title)
         setResult(false, "That menu closed")
         return
     end
+    if not missionOk(menu.target, (menu.name or ""):gsub("^⚠ MISSION · ", "")) then return end
     Coop.menu = nil
     local ok, res = pcall(function()
         return menu.target:PeriLinkPick(index, title, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
@@ -571,6 +602,8 @@ local function castSlot(slot, sx, sy)
         openMenu(sx, sy, target, tx, ty)
         return
     end
+    local okN, tname = pcall(function() return target:PeriLinkName() end)
+    if not missionOk(target, okN and tname or nil) then return end
 
     local ok, res = pcall(function()
         return target:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
@@ -651,6 +684,7 @@ local function refreshUltTargets()
             local right = dx * fy - dy * fx
             if dx * dx + dy * dy <= Coop.ultRadius * Coop.ultRadius then
                 local name = targetName(id, t.obj, t.kind)
+                if Coop.protectMissions and isMission(t.obj) then name = "⚠ " .. name end
                 -- How dangerous it is right now + hacks already on it, straight from the game
                 -- ("red|0.40|Short Circuit,Overheat"). Older scripts: every NPC counts as red.
                 local threat, up, effects = (t.kind == "device") and "device" or "red", 0, {}
@@ -716,6 +750,7 @@ local function refreshTags()
             if x then
                 local id = tostring(t.obj:GetEntityID().hash)
                 local name = targetName(id, t.obj, t.kind)
+                if Coop.protectMissions and isMission(t.obj) then name = "⚠ " .. name end
                 targets[id] = { obj = t.obj, kind = t.kind, name = name }
                 tags[#tags + 1] = { id = id, name = name, kind = t.kind, x = x, y = y }
             end
@@ -736,6 +771,7 @@ local function hackById(id, slot)
         return
     end
     local hackName = Coop.deck[slot + 1] and Coop.deck[slot + 1].name or ("slot " .. (slot + 1))
+    if not missionOk(t.obj, t.name) then return end
     local ok, res = pcall(function()
         return t.obj:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
     end)
@@ -1067,6 +1103,7 @@ local function leaveWorld()
 end
 
 registerForEvent("onUpdate", function(dt)
+    Coop.clock = Coop.clock + dt
     local ready, exists = checkWorld()
     if worldReady and not ready then
         worldExists = exists          -- leaving to the main menu: don't touch the time system anymore
