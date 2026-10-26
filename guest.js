@@ -42,7 +42,106 @@ const Guest = (() => {
     }
     // Keys shown on the in-game console
     document.querySelectorAll('[data-key]').forEach((b) => { b.textContent = keyLabel(settings.keybinds[b.dataset.key]); });
+    // The loadout panel (F7) shows the non-hack keys too
+    const keys = $('loadout-keys');
+    if (keys) {
+      keys.innerHTML = '';
+      for (const [action, label] of ACTIONS) {
+        if (action.startsWith('slot')) continue;
+        const name = document.createElement('span');
+        name.textContent = label;
+        const btn = document.createElement('button');
+        btn.textContent = listeningFor === action ? 'press a key…' : keyLabel(settings.keybinds[action]);
+        btn.classList.toggle('listening', listeningFor === action);
+        btn.addEventListener('click', () => { listeningFor = action; renderKeybinds(); });
+        keys.append(name, btn);
+      }
+    }
     renderHackBar();
+    renderLoadout();
+  }
+
+  // ---------- loadout (F7): which of his hacks Peri carries, in which slot, on which key ----------
+  // With his cyberdeck: any of his hacks. Without one (her own deck): up to 3 programs from his backpack.
+
+  const loadoutKey = () => (state?.virtual ? 'loadoutOwn' : 'loadoutDeck');
+  const loadoutOpen = () => !$('loadout').hidden;
+  let lastLoadoutSent = null;
+
+  function syncLoadout() {
+    if (!state?.pool || !conn?.open) return;
+    const names = (settings[loadoutKey()] || []).slice(0, MAX_SLOTS);
+    const sig = `${loadoutKey()}:${names.join('\t')}`;
+    if (sig === lastLoadoutSent) return;
+    lastLoadoutSent = sig;
+    send({ cmd: 'loadout', names });
+  }
+
+  async function setLoadout(names) {
+    settings = await window.neural.saveSettings({ [loadoutKey()]: names });
+    syncLoadout();
+    renderLoadout();
+  }
+
+  function toggleLoadout(on) {
+    const show = on ?? !loadoutOpen();
+    $('loadout').hidden = !show;
+    if (show) { closeMenu(); renderLoadout(); }
+    else if (listeningFor) { listeningFor = null; renderKeybinds(); }
+  }
+
+  function renderLoadout() {
+    if (!loadoutOpen()) return;
+    const pool = state?.pool || [];
+    const max = state?.loadoutMax || 0;
+    const picked = (state?.deck || []).map((d) => d.name);
+    $('loadout-count').textContent = `${picked.length}/${max}`;
+    $('loadout-note').textContent = !state?.scripts ? 'Hacking is offline on his PC.'
+      : !pool.length ? (state?.virtual ? 'He has no quickhack programs in his backpack.' : 'No quickhacks: he needs a cyberdeck (or the experimental mode on his Host screen).')
+      : state.virtual ? `He has no cyberdeck, so you bring your own: carry up to ${max} of the programs in his backpack. They use your RAM.`
+      : `His cyberdeck: pick which of his hacks you use, their order and their keys.`;
+
+    const list = $('loadout-picked');
+    list.innerHTML = '';
+    picked.forEach((name, i) => {
+      const li = document.createElement('li');
+      const key = document.createElement('button');
+      const action = `slot${i + 1}`;
+      key.className = 'key' + (listeningFor === action ? ' listening' : '');
+      key.textContent = listeningFor === action ? 'press a key…' : keyLabel(settings.keybinds[action] || '');
+      key.title = 'Click, then press the key for this hack';
+      key.addEventListener('click', () => { listeningFor = action; renderKeybinds(); });
+      const label = document.createElement('span');
+      label.textContent = name;
+      const up = document.createElement('button');
+      up.className = 'mini'; up.textContent = '↑'; up.title = 'Move up'; up.disabled = i === 0;
+      up.addEventListener('click', () => { const n = [...picked]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; setLoadout(n); });
+      const rm = document.createElement('button');
+      rm.className = 'mini'; rm.textContent = '✕'; rm.title = 'Remove';
+      rm.addEventListener('click', () => setLoadout(picked.filter((x) => x !== name)));
+      li.append(key, label, up, rm);
+      list.appendChild(li);
+    });
+    if (!picked.length) { const li = document.createElement('li'); li.className = 'muted'; li.textContent = 'Nothing picked yet: click a program below.'; list.appendChild(li); }
+
+    const ul = $('loadout-pool');
+    ul.innerHTML = '';
+    for (const h of pool) {
+      const on = picked.includes(h.name);
+      const li = document.createElement('li');
+      li.className = (on ? 'on' : '') + (h.ultimate ? ' ultimate' : '');
+      li.innerHTML = '<span class="pick"></span><span class="name"></span><span class="tier"></span><span class="cost"></span>';
+      li.querySelector('.pick').textContent = on ? `${picked.indexOf(h.name) + 1}` : '+';
+      li.querySelector('.name').textContent = h.name;
+      li.querySelector('.tier').textContent = h.tier ? `T${h.tier}` : '';
+      li.querySelector('.cost').textContent = `${h.cost} RAM`;
+      li.addEventListener('click', () => {
+        if (on) return setLoadout(picked.filter((x) => x !== h.name));
+        if (picked.length >= max) return toast(`Full (${max}) — remove one first`);
+        setLoadout([...picked, h.name]);
+      });
+      ul.appendChild(li);
+    }
   }
 
   async function captureKeybind(e) {
@@ -115,7 +214,7 @@ const Guest = (() => {
 
     peer.on('open', () => {
       conn = peer.connect(ROOM_PREFIX + code, { reliable: true, metadata: { operatorId: settings.operatorId } });
-      conn.on('open', () => { clearTimeout(connectTimeout); startHeartbeat(); });
+      conn.on('open', () => { clearTimeout(connectTimeout); startHeartbeat(); lastLoadoutSent = null; syncLoadout(); });
       conn.on('data', onData);
       conn.on('close', lost);
     });
@@ -390,7 +489,7 @@ const Guest = (() => {
     if (u) {
       slot.classList.toggle('active', u.left > 0);
       slot.classList.toggle('ready', u.left <= 0 && u.cd <= 0);
-      $('ult-text').textContent = u.left > 0 ? `Override ${u.left.toFixed(1)}s`
+      $('ult-text').textContent = u.left > 0 ? `Override ${u.left.toFixed(1)}s · again: end`
         : u.cd > 0 ? `Override ${Math.ceil(u.cd)}s` : 'Override';
     }
     const radar = $('radar');
@@ -577,6 +676,8 @@ const Guest = (() => {
 
   function onState(next) {
     state = next;
+    syncLoadout();
+    renderLoadout();
     renderHackBar();
     renderFocus();
     renderTags();
@@ -786,10 +887,18 @@ const Guest = (() => {
       if (e.button === 1) { e.preventDefault(); pingAt(e.clientX, e.clientY); }   // middle-click: ping
     });
     overlay.addEventListener('contextmenu', (e) => e.preventDefault());
+    $('loadout-open').addEventListener('mousedown', (e) => { e.stopPropagation(); toggleLoadout(); });
+    // OVERRIDE: click it (or its key) to start, click again to end it early
+    $('ult-slot').addEventListener('mousedown', (e) => { e.stopPropagation(); if (send({ cmd: 'ult' })) toast(ultActive() ? 'OVERRIDE — ending' : 'OVERRIDE', true); });
+    $('loadout').addEventListener('mousedown', (e) => e.stopPropagation());
 
     document.addEventListener('keydown', async (e) => {
       if (await captureKeybind(e)) return;
       if (!$('view-stage').classList.contains('active') || chatOpen()) return;
+
+      // F7: loadout + keys. While it's open, keys don't hack.
+      if (e.key === 'F7') { e.preventDefault(); toggleLoadout(); return; }
+      if (loadoutOpen()) { if (e.key === 'Escape') { e.preventDefault(); toggleLoadout(false); } return; }
 
       const kb = settings.keybinds;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -801,7 +910,7 @@ const Guest = (() => {
         if (e.key === 'Escape')   { e.preventDefault(); closeMenu(); return; }
       }
 
-      if (is('ult')) { e.preventDefault(); if (!e.repeat && send({ cmd: 'ult' })) toast('OVERRIDE', true); return; }
+      if (is('ult')) { e.preventDefault(); if (!e.repeat && send({ cmd: 'ult' })) toast(ultActive() ? 'OVERRIDE — ending' : 'OVERRIDE', true); return; }
       if (ultActive() && e.key === 'Tab') { e.preventDefault(); cycleTarget(e.shiftKey); return; }
       if (ultActive() || hoverTag) {
         for (let i = 0; i < MAX_SLOTS; i++) {

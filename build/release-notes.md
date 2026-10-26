@@ -1,7 +1,12 @@
-**NeuralLink 0.7.3**: mission failsafe, hack vehicles, real enemy names, slower mouse in focus
+**NeuralLink 0.7.4**: Peri's loadout (F7), her own cyberdeck works, end OVERRIDE early
+
+- **F7 = Loadout** (or click *F7 Loadout* on the bar): pick which hacks you carry, their order and their keys. The other keys (Focus, Ping, Override, Talk, Fullscreen) can be changed there too.
+  - **With his cyberdeck:** pick any of his hacks.
+  - **Without one ("Peri brings her own cyberdeck"):** carry up to **3 programs from his backpack**, paid from your RAM.
+- **Fixed "unable to hack target"** in the bring-your-own-cyberdeck mode. The game was checking *his* missing cyberdeck and RAM. Checks on the target (immune, friendly, already affected) still apply.
+- **OVERRIDE can be ended early:** press its key again or click it. It then recharges only for the time you used (at least a quarter).
 
 - **Mission things are protected.** Cars, devices and friendly characters that the current mission needs are marked **⚠** on the radar, the focus tags and in the hack menu. Hacking one by accident could break the mission, so the first try only warns you. Do it again within 6 seconds if you really mean it. Mission enemies and bosses are fought as normal (no warning).
-
 
 - **Vehicles can be hacked** (Take Control, Force Brakes, Accelerate, Detonate), once he has the Intelligence vehicle-hacking perk. It follows his skill tree, the same as when he hacks a car himself. Cars show up like devices: click one (or right-click it on the radar) for its hack menu. The car he's driving is never listed.
 

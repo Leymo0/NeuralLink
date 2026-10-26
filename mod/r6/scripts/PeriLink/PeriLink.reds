@@ -90,8 +90,43 @@ public class PeriLinkApi {
     return ids;
   }
 
-  // Every NPC quickhack action in the virtual deck (not grouped)
-  public static func GetVirtualDeckAll() -> array<PlayerQuickhackData> {
+  // Quickhack programs he owns (in his backpack) that work on people. Not grouped.
+  public static func GetInventoryAll(player: ref<PlayerPuppet>) -> array<PlayerQuickhackData> {
+    let list: array<PlayerQuickhackData>;
+    let items: array<wref<gameItemData>>;
+    if !IsDefined(player) || !GameInstance.GetTransactionSystem(player.GetGame()).GetItemList(player, items) { return list; }
+    for data in items {
+      if IsDefined(data) {
+        let id = data.GetID();
+        let rec = TweakDBInterface.GetItemRecord(ItemID.GetTDBID(id));
+        if IsDefined(rec) && IsDefined(rec.ItemType()) && Equals(rec.ItemType().Type(), gamedataItemType.Prt_Program) {
+          let acts: array<wref<ObjectAction_Record>>;
+          rec.ObjectActions(acts);
+          for a in acts {
+            if IsDefined(a) && Equals(a.ObjectActionType().Type(), gamedataObjectActionType.PuppetQuickHack) {
+              let q: PlayerQuickhackData;
+              q.itemID = id;
+              q.actionRecord = a;
+              q.quality = 1;
+              if IsDefined(rec.Quality()) { q.quality = rec.Quality().Value(); }
+              ArrayPush(list, q);
+            }
+          }
+        }
+      }
+    }
+    return list;
+  }
+
+  // Peri's own deck: the quickhack programs in his backpack (she picks which ones);
+  // if he owns none, a small built-in set so the mode still works
+  public static func GetVirtualDeckAll(player: ref<PlayerPuppet>) -> array<PlayerQuickhackData> {
+    let owned = PeriLinkApi.GetInventoryAll(player);
+    if ArraySize(owned) > 0 { return owned; }
+    return PeriLinkApi.GetBuiltInDeckAll();
+  }
+
+  public static func GetBuiltInDeckAll() -> array<PlayerQuickhackData> {
     let list: array<PlayerQuickhackData>;
     for id in PeriLinkApi.VirtualPrograms() {
       let rec = TweakDBInterface.GetItemRecord(id);
@@ -116,7 +151,7 @@ public class PeriLinkApi {
   // Deck shown to Peri: his real one, or the virtual one when that applies
   public static func GetDeckFor(player: ref<PlayerPuppet>, virtualEnabled: Bool) -> array<PlayerQuickhackData> {
     if PeriLinkApi.UsingVirtual(player, virtualEnabled) {
-      return PeriLinkApi.GroupDeck(PeriLinkApi.GetVirtualDeckAll());
+      return PeriLinkApi.GroupDeck(PeriLinkApi.GetVirtualDeckAll(player));
     }
     return PeriLinkApi.GetDeck(player);
   }
@@ -124,7 +159,7 @@ public class PeriLinkApi {
   // Every quickhack action Peri can use right now (not grouped): his deck, or the virtual one
   public static func GetDeckAllFor(player: ref<PlayerPuppet>, virtualEnabled: Bool) -> array<PlayerQuickhackData> {
     if PeriLinkApi.UsingVirtual(player, virtualEnabled) {
-      return PeriLinkApi.GetVirtualDeckAll();
+      return PeriLinkApi.GetVirtualDeckAll(player);
     }
     return RPGManager.GetPlayerQuickHackListWithQuality(player);
   }
@@ -409,12 +444,14 @@ public func PeriLinkThreat() -> String {
 // Mirrors the game's own checks; RAM is paid from Peri's pool, not his.
 @addMethod(ScriptedPuppet)
 public func PeriLinkBuildVirtualCommands() -> array<ref<QuickhackData>> {
-  return this.PeriLinkBuildFreeCommands(PeriLinkApi.GetVirtualDeckAll());
+  return this.PeriLinkBuildFreeCommands(PeriLinkApi.GetVirtualDeckAll(GetPlayer(this.GetGame())), true);
 }
 
 // Builds this NPC's list from any deck, ignoring RAM (Peri pays, or the ultimate makes it free)
 @addMethod(ScriptedPuppet)
-public func PeriLinkBuildFreeCommands(deckAll: array<PlayerQuickhackData>) -> array<ref<QuickhackData>> {
+// noDeck: Peri's own deck (he has no cyberdeck): the game's "needs a cyberdeck / enough RAM"
+// checks on HIM don't apply. Checks on the target (immune, already affected...) still do.
+public func PeriLinkBuildFreeCommands(deckAll: array<PlayerQuickhackData>, noDeck: Bool) -> array<ref<QuickhackData>> {
   let player = GetPlayer(this.GetGame());
   let context = this.GetPS().GenerateContext(gamedeviceRequestType.Remote, Device.GetInteractionClearance(), player, this.GetEntityID());
   let records: array<wref<ObjectAction_Record>>;
@@ -442,7 +479,11 @@ public func PeriLinkBuildFreeCommands(deckAll: array<PlayerQuickhackData>) -> ar
           cmd.m_isLocked = true;
           cmd.m_inactiveReason = "LocKey#27694";
         } else {
-          if !action.IsPossible(this) || !action.IsVisible(player) {
+          // inactive only because of HIM (no cyberdeck "LocKey#7019", or his RAM: no reason)
+          let hisSide = action.IsInactive()
+            && (StrLen(action.GetInactiveReason()) == 0 || (noDeck && Equals(action.GetInactiveReason(), "LocKey#7019")));
+          if hisSide { action.SetActive(); }
+          if !action.IsPossible(this) || (!noDeck && !action.IsVisible(player)) {
             cmd.m_isLocked = true;
             cmd.m_inactiveReason = "LocKey#7019";
           } else {
@@ -471,7 +512,7 @@ public func PeriLinkBuildFreeCommands(deckAll: array<PlayerQuickhackData>) -> ar
 @addMethod(ScriptedPuppet)
 public func PeriLinkCommandsFor(virtualMode: Bool, free: Bool, virtualEnabled: Bool) -> array<ref<QuickhackData>> {
   if free {
-    return this.PeriLinkBuildFreeCommands(PeriLinkApi.GetDeckAllFor(GetPlayer(this.GetGame()), virtualEnabled));
+    return this.PeriLinkBuildFreeCommands(PeriLinkApi.GetDeckAllFor(GetPlayer(this.GetGame()), virtualEnabled), virtualMode);
   }
   if virtualMode {
     return this.PeriLinkBuildVirtualCommands();

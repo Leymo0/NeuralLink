@@ -322,6 +322,9 @@ const Host = (() => {
       command.title = String(msg.title || '').slice(0, 60);
     } else if (cmd === 'menuclose') {
       // nothing to check
+    } else if (cmd === 'loadout') {
+      if (!Array.isArray(msg.names)) return;
+      command.names = msg.names.slice(0, 8).map((n) => String(n || '').slice(0, 60));
     } else if (cmd === 'hack' || cmd === 'ping' || cmd === 'menu') {
       const x = Number(msg.x), y = Number(msg.y);
       if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return;
@@ -346,6 +349,7 @@ const Host = (() => {
     else if (cmd === 'pick') log('act', `Hack: ${command.title}`);
     else if (cmd === 'focus') { if (command.on) log('act', 'Focus'); }
     else if (cmd === 'menuclose') { /* quiet */ }
+    else if (cmd === 'loadout') log('act', `Peri's loadout: ${command.names.join(', ') || 'default'}`);
     else log('act', `Hack: ${lastState?.deck?.[command.slot]?.name || 'slot ' + (command.slot + 1)}`);
     if (!ok) log('act', '⚠ could not reach the mod — check the game folder');
   }

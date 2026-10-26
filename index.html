@@ -175,6 +175,7 @@
       <div class="slot"><b>R-click</b>Scan</div>
       <div class="slot"><b data-key="ping">Q</b>Ping</div>
       <div class="slot"><b data-key="chat">Enter</b>Talk</div>
+      <div class="slot loadout-slot" id="loadout-open" title="Pick your hacks and keys"><b>F7</b>Loadout</div>
       <label class="vol">🔊 <input type="range" id="volume" min="0" max="1" step="0.05" value="0.8"></label>
       <button id="leave" class="small danger">Unplug</button>
     </div>
@@ -195,7 +196,7 @@
         <span class="radar-title">OVERRIDE</span>
         <span class="radar-track"><span id="radar-fill"></span></span>
         <span id="radar-time">6.0s</span>
-        <span class="radar-hint">1–8 hack the <b>targeted</b> enemy · Tab next enemy · hover to aim · right-click menu · no RAM</span>
+        <span class="radar-hint">1–8 hack the <b>targeted</b> enemy · Tab next enemy · hover to aim · right-click menu · no RAM · Override key again ends it</span>
       </div>
       <div class="radar-body">
         <div id="radar-field">
@@ -209,6 +210,15 @@
           <div class="radar-legend"><i class="lg red"></i>fighting you <i class="lg yellow"></i>ready to fight <i class="lg civ"></i>civilian <i class="lg device"></i>device</div>
         </div>
       </div>
+    </div>
+    <div id="loadout" hidden>
+      <div class="menu-head"><span>LOADOUT</span><span id="loadout-count" class="loadout-count"></span><span class="menu-hint">click to add / remove · F7 / Esc closes</span></div>
+      <p id="loadout-note" class="loadout-note"></p>
+      <ol id="loadout-picked" class="loadout-picked"></ol>
+      <div class="loadout-sub">HIS PROGRAMS</div>
+      <ul id="loadout-pool" class="loadout-pool"></ul>
+      <div class="loadout-sub">OTHER KEYS</div>
+      <div id="loadout-keys" class="keybinds"></div>
     </div>
     <div id="hack-menu" hidden>
       <div class="menu-head"><span id="menu-name">Target</span><span class="menu-hint">1–9 or click · Esc closes</span></div>

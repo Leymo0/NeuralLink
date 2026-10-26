@@ -91,7 +91,11 @@ local Coop = {
     scriptsOk      = nil,    -- is PeriLink.reds loaded? (checked on first use)
     deck           = {},     -- his equipped quickhacks: { {name, cost, tier, ultimate}, ... }
     ram            = { 0, 0 },
-    virtualActive  = false,  -- experimental deck in use right now (enabled + no cyberdeck)
+    virtualActive  = false,
+    pool           = {},     -- every hack she could pick (his deck, or the programs in his backpack)
+    loadout        = nil,    -- names Peri picked, in order (nil = the first ones)
+    loadoutMax     = 0,
+    noDeckSlots    = 3,      -- without his cyberdeck, Peri carries this many  -- experimental deck in use right now (enabled + no cyberdeck)
     ultLeft        = 0,      -- seconds of ultimate remaining
     ultCdLeft      = 0,
     ultTargets     = {},     -- id -> { obj, kind, name } while the ultimate is active
@@ -482,9 +486,25 @@ local function refreshDeck()
                 deck[#deck + 1] = { name = name, cost = tonumber(cost), tier = tonumber(tier), ultimate = ult == "1" }
             end
         end
-        Coop.deck = deck
+        for i, h in ipairs(deck) do h.slot = i - 1 end          -- index into PeriLink.reds' deck
+        Coop.pool = deck
         local wasActive = Coop.virtualActive
         Coop.virtualActive = PeriLinkApi.UsingVirtual(player, Coop.virtualEnabled) == true
+        -- Peri's loadout: the hacks she picked (F7 in her app), in her order.
+        -- Without his cyberdeck she can carry only Coop.noDeckSlots of them.
+        Coop.loadoutMax = Coop.virtualActive and Coop.noDeckSlots or #deck
+        local chosen, used = {}, {}
+        for _, name in ipairs(Coop.loadout or {}) do
+            for _, h in ipairs(deck) do
+                if h.name == name and not used[name] and #chosen < Coop.loadoutMax then
+                    chosen[#chosen + 1] = h; used[name] = true
+                end
+            end
+        end
+        if #chosen == 0 then
+            for i = 1, math.min(Coop.loadoutMax, #deck) do chosen[#chosen + 1] = deck[i] end
+        end
+        Coop.deck = chosen
         if Coop.virtualActive then
             local level = PeriLinkApi.GetLevel(player) or 1
             Coop.vramMax = math.floor(Coop.vramBase + level * Coop.vramPerLevel)
@@ -591,7 +611,9 @@ local function castSlot(slot, sx, sy)
         return
     end
 
-    local hackName = Coop.deck[slot + 1] and Coop.deck[slot + 1].name or ("slot " .. (slot + 1))
+    local entry = Coop.deck[slot + 1]
+    if not entry then setResult(false, "Slot " .. (slot + 1) .. " is empty"); return end
+    local hackName = entry.name
     local target, tx, ty, kind = getTargetNear(sx, sy, nil)
     if not target then
         addMarker(sx, sy, "miss", "miss")
@@ -606,7 +628,7 @@ local function castSlot(slot, sx, sy)
     if not missionOk(target, okN and tname or nil) then return end
 
     local ok, res = pcall(function()
-        return target:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
+        return target:PeriLinkCast(entry.slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
     end)
     handleHackResult(ok, res, hackName, tx, ty)
 end
@@ -648,9 +670,13 @@ updateAimTarget = function(target, kind)
     local aim = { id = id, kind = kind, costs = {}, name = targetName(id, target, kind) }
     if kind == "npc" then
         pcall(function()
+            local all = {}
             for _, line in ipairs(target:PeriLinkSlotCosts(Coop.virtualEnabled, Coop.ultLeft > 0) or {}) do
                 local cost, usable = line:match("^(%-?%d+)|([01])$")
-                aim.costs[#aim.costs + 1] = { cost = tonumber(cost) or -1, usable = usable == "1" }
+                all[#all + 1] = { cost = tonumber(cost) or -1, usable = usable == "1" }
+            end
+            for _, h in ipairs(Coop.deck) do       -- in Peri's slot order
+                aim.costs[#aim.costs + 1] = all[h.slot + 1] or { cost = -1, usable = false }
             end
         end)
     end
@@ -770,10 +796,12 @@ local function hackById(id, slot)
         openMenu(nil, nil, t.obj, nil, nil)
         return
     end
-    local hackName = Coop.deck[slot + 1] and Coop.deck[slot + 1].name or ("slot " .. (slot + 1))
+    local entry = Coop.deck[slot + 1]
+    if not entry then setResult(false, "Slot " .. (slot + 1) .. " is empty"); return end
+    local hackName = entry.name
     if not missionOk(t.obj, t.name) then return end
     local ok, res = pcall(function()
-        return t.obj:PeriLinkCast(slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
+        return t.obj:PeriLinkCast(entry.slot, Coop.virtualEnabled, math.floor(Coop.vram), Coop.ultLeft > 0)
     end)
     handleHackResult(ok, res, hackName, nil, nil)
 end
@@ -793,6 +821,13 @@ local function writeState()
     for _, h in ipairs(Coop.deck) do
         parts[#parts + 1] = string.format('{"name":%s,"cost":%d,"tier":%d,"ultimate":%s}',
             jsonString(h.name), h.cost or 0, h.tier or 0, h.ultimate and "true" or "false")
+    end
+    local poolParts = {}
+    local inDeck = {}
+    for _, h in ipairs(Coop.deck) do inDeck[h.name] = true end
+    for _, h in ipairs(Coop.pool or {}) do
+        poolParts[#poolParts + 1] = string.format('{"name":%s,"cost":%d,"tier":%d,"ultimate":%s,"on":%s}',
+            jsonString(h.name), h.cost or 0, h.tier or 0, h.ultimate and "true" or "false", inDeck[h.name] and "true" or "false")
     end
     local res = {}
     for _, r in ipairs(results) do
@@ -834,8 +869,9 @@ local function writeState()
             jsonString(Coop.aim.id), jsonString(Coop.aim.name or ""), jsonString(Coop.aim.kind or ""), table.concat(costs, ","))
     end
     local text = string.format(
-        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"ult":%s,"aim":%s,"tags":[%s],"deck":[%s],"menu":%s,"results":[%s]}',
+        '{"scripts":%s,"hostCanHack":%s,"virtual":%s,"loadoutMax":%d,"pool":[%s],"ram":[%.1f,%.1f],"focus":[%.1f,%.1f,%s],"ult":%s,"aim":%s,"tags":[%s],"deck":[%s],"menu":%s,"results":[%s]}',
         tostring(Coop.scriptsOk == true), tostring(Coop.hostCanHack), tostring(Coop.virtualActive),
+        Coop.loadoutMax or 0, table.concat(poolParts, ","),
         Coop.virtualActive and Coop.vram or (Coop.ram[1] or 0), Coop.ram[2] or 0,
         Coop.focusLeft, Coop.focusMax, tostring(Coop.focusHeld), ult, aim, table.concat(tagParts, ","),
         table.concat(parts, ","), menu, table.concat(res, ","))
@@ -898,7 +934,24 @@ local function handleCommand(cmd, arg)
         updateAim(parsePoint(arg))
         writeState()
     elseif cmd == "ult" then
-        startUltimate()
+        if Coop.ultLeft > 0 then              -- pressed again: end OVERRIDE early
+            local used = 1 - Coop.ultLeft / Coop.ultDuration
+            stopUltimate()
+            -- recharge only for the part she used (at least a quarter)
+            Coop.ultCdLeft = Coop.ultCooldown * math.max(0.25, math.min(1, used))
+            pushMessage("> OVERRIDE ended", "system")
+            setResult(true, "OVERRIDE ended")
+        else
+            startUltimate()
+        end
+    elseif cmd == "loadout" then
+        local names = {}
+        for name in (arg .. "\t"):gmatch("([^\t]*)\t") do
+            if name ~= "" and #names < 8 then names[#names + 1] = name end
+        end
+        Coop.loadout = names
+        refreshDeck()
+        writeState()
     elseif cmd == "ulthack" then
         local id, slot = arg:match("^(%S+)%s+(%d+)$")
         if id then hackById(id, tonumber(slot)) end

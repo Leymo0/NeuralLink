@@ -56,6 +56,9 @@ const DEFAULT_SETTINGS = {
   // Extra relay servers, only needed if the direct connection fails on your internet.
   // Example: [{ "urls": "turn:your.server:3478", "username": "u", "credential": "p" }]
   turnServers: [],
+  // Peri's picked hacks (F7): with his cyberdeck, and with her own (no cyberdeck, max 3)
+  loadoutDeck: [],
+  loadoutOwn: [],
   keybinds: {
     slot1: '1', slot2: '2', slot3: '3', slot4: '4',
     slot5: '5', slot6: '6', slot7: '7', slot8: '8',
@@ -295,6 +298,12 @@ ipcMain.handle('game:command', (_e, c) => {
     }
     case 'menu':  return pt ? writeToGame('menu', pt) : false;
     case 'menuclose': return writeToGame('menuclose');
+    case 'loadout': {
+      // Peri's picked hacks, in order (names from the game's own list)
+      if (!Array.isArray(c.names)) return false;
+      const names = c.names.slice(0, MAX_SLOTS).map((n) => String(n || '').replace(/[\t\r\n|]/g, ' ').trim().slice(0, 60)).filter(Boolean);
+      return writeToGame('loadout', names.join('\t'));
+    }
     case 'focus': return writeToGame('focus', c.on ? '1' : '0');
     case 'pick': {
       const seq = Number(c.seq), index = Number(c.index);

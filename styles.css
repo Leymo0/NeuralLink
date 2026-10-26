@@ -362,3 +362,35 @@ button { font: inherit; cursor: pointer; }
 .stream-stats { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 #stream-quality { margin-left: 8px; background: #0b060b; color: var(--ink); border: 1px solid var(--line); padding: 3px 6px; font: inherit; }
 #stage-latency { max-width: 60vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- loadout (F7) ---------- */
+.loadout-slot, .ult-slot { cursor: pointer; }
+#loadout {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6;
+  width: min(560px, calc(100% - 40px)); max-height: calc(100% - 120px); overflow: auto;
+  background: rgba(8, 4, 6, .94); border: 1px solid var(--red); padding: 14px 16px;
+  box-shadow: 0 0 30px rgba(255, 59, 77, .25);
+}
+#loadout[hidden] { display: none; }
+.loadout-count { margin-left: 10px; color: var(--cyan); font-weight: 700; }
+.loadout-note { margin: 6px 0 10px; font-size: 12px; opacity: .8; line-height: 1.4; }
+.loadout-sub { margin: 12px 0 6px; font-size: 11px; letter-spacing: .18em; opacity: .6; }
+.loadout-picked { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.loadout-picked li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid rgba(255, 59, 77, .35); background: rgba(255, 59, 77, .06); }
+.loadout-picked li span { flex: 1; }
+.loadout-picked .key { min-width: 64px; font-family: monospace; }
+
+.loadout-picked .mini { padding: 2px 8px; }
+.loadout-pool { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.loadout-pool li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; cursor: pointer; border: 1px solid rgba(255, 255, 255, .12); }
+.loadout-pool li:hover { border-color: rgba(255, 59, 77, .7); }
+.loadout-pool li.on { border-color: var(--red); background: rgba(255, 59, 77, .14); }
+.loadout-pool .pick { width: 18px; text-align: center; font-weight: 700; color: var(--red); }
+.loadout-pool .name { flex: 1; }
+.loadout-pool .tier, .loadout-pool .cost { font-size: 11px; opacity: .65; }
+.loadout-pool li.ultimate .name { color: #ffd23d; }
+#loadout-keys { margin-top: 4px; }
+.loadout-picked button { font-family: var(--mono); background: #0b060b; color: var(--yellow); border: 1px solid var(--line); padding: 4px 10px; cursor: pointer; }
+.loadout-picked button.mini { color: var(--ink); }
+.loadout-picked button:disabled { opacity: .3; cursor: default; }
+.loadout-picked button.key.listening { color: var(--cyan); border-color: var(--cyan); }
